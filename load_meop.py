@@ -15,7 +15,7 @@ FNAME_DEPLOYMENTS = ROOT + 'list_deployments.csv'
 
 
 class Profile():
-    def __init__(self,ds):
+    def __init__(self,ds,filename,full=False):
         def calc_gpha(t,s,p,maxz):
             try:
                 crop = lambda da: da.where(p<maxz,drop=True)
@@ -33,13 +33,15 @@ class Profile():
         self.latitude = ds.LATITUDE.item()
         self.longitude = ds.LONGITUDE.item()
         self.time = np.datetime64(ds.JULD.item().strftime('%Y-%m-%dT%H:%M:%S'))
+        self.filename = filename
         self.gph = calc_gpha(ds.TEMP_ADJUSTED,ds.PSAL_ADJUSTED,ds.PRES_ADJUSTED,300)
 
-        coords = {'pressure': ds.PRES_ADJUSTED}
-        self.ds = xr.Dataset(
-            {'temperature': xr.DataArray(ds.TEMP_ADJUSTED, coords=coords),
-             'salinity': xr.DataArray(ds.PSAL_ADJUSTED, coords=coords)}
-        )
+        if full:
+            coords = {'pressure': ds.PRES_ADJUSTED}
+            self.ds = xr.Dataset(
+                {'temperature': xr.DataArray(ds.TEMP_ADJUSTED, coords=coords),
+                'salinity': xr.DataArray(ds.PSAL_ADJUSTED, coords=coords)}
+            )
 
 class MEOP():
 
@@ -91,19 +93,19 @@ class MEOP():
 
             if any(in_area):
                 for n in ds.N_PROF.where(in_area,drop=True):
-                    profiles.append(Profile(ds.sel(N_PROF=int(n))))
+                    profiles.append(Profile(ds.sel(N_PROF=int(n)),fname))
 
         self.profiles = profiles
 
         lats = [p.latitude for p in profiles]
         lons = [p.longitude for p in profiles]
-        sst = [p.ds.temperature.isel(N_LEVELS=0).item() for p in profiles]
+        filename = [p.filename for p in profiles]
         gph = [p.gph for p in profiles]
         times = [p.time for p in profiles]
 
         self.df = pd.DataFrame({'latitude':lats,
                                 'longitude':lons,
-                                'sst': sst,
+                                'filename':filename,
                                 'gph':gph},
                                 index=times)
 
@@ -138,3 +140,66 @@ class MEOP():
                 ax[i].set_title(str(y))
                 ax[i].set_ylim([-2.4,1.4])
                 ax[i].set_xlim([33,34.75])
+
+    def grid_profiles(self,lons,lats,lonwindow=None,latwindow=None):
+
+        if (lonwindow is None) and (latwindow is None):
+            if (len(lons) > 1) and (len(lats) > 1):
+                lonwindow = (lons[1] - lons[0])/2
+                latwindow = (lats[1] - lats[0])/2
+            else:
+                ValueError('lon and lat insufficient length to compute lat and lon windows: please provide')
+
+        def get_in(df,lat,lon):
+            return df[(df.longitude > lon - lonwindow) &
+                    (df.longitude < lon + lonwindow) &
+                    (df.latitude > lat - latwindow) &
+                    (df.latitude < lat + latwindow)]
+
+        def resample(df_in):
+            df = df_in.resample('MS').mean(numeric_only=True)
+            count = df_in.resample('MS').count()
+            return df.dropna(), count[count > 0].dropna()
+
+        def create_ds(df,df_ct,lat,lon):
+            time = df.index.to_numpy()
+            data_vars={}
+            def add_var(name):
+                data_vars['profile_'+name]=(["longitude","latitude","time"], np.expand_dims(df[name].to_numpy(),axis=(0,1)))
+            add_var('gph')
+            add_var('latitude')
+            add_var('longitude')
+            data_vars['profile_cnt']=(["longitude","latitude","time"], np.expand_dims(df_ct['gph'].to_numpy(),axis=(0,1)))
+            return xr.Dataset(
+                data_vars = data_vars,
+                coords=dict(
+                    longitude=(["longitude"], [lon]),
+                    latitude=(["latitude"], [lat]),
+                    time=(["time"],time),
+                    )
+                )
+                
+        def build_ds(lat,lon):
+            data_ = get_in(self.df,lat,lon)
+
+            if len(data_) > 0:
+                data, ct = resample(data_)
+                ds = create_ds(data,ct,lat,lon)
+            else:
+                ds = None
+
+            return ds
+
+        dses = []
+        for lon in tqdm(lons):
+            for lat in lats:
+                ds = build_ds(lat,lon)
+                if ds is not None:
+                    dses.append(ds)
+                # tmp_dses = list(map(build_ds,lats,[lon for _ in lats]))
+                # ds_for_lon = xr.merge(list(filter(lambda item: item is not None, tmp_dses)))
+                # dses = dses + [ds_for_lon]
+
+        print('merging...')
+        self.gridded_profiles = xr.merge(dses)
+
