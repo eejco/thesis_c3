@@ -12,7 +12,7 @@ ROOT = '/nfs/b0133/eejco/data/MEOP_2024/media/disk2/roquet/MEOP_public/MEOP-CTD_
 FNAME_PROFILES = ROOT + 'list_profiles.csv'
 FNAME_TAGS = ROOT + 'list_tags.csv'
 FNAME_DEPLOYMENTS = ROOT + 'list_deployments.csv'
-
+MAXZ = 300
 
 class Profile():
     def __init__(self,ds,filename,full=False):
@@ -34,7 +34,7 @@ class Profile():
         self.longitude = ds.LONGITUDE.item()
         self.time = np.datetime64(ds.JULD.item().strftime('%Y-%m-%dT%H:%M:%S'))
         self.filename = filename
-        self.gph = calc_gpha(ds.TEMP_ADJUSTED,ds.PSAL_ADJUSTED,ds.PRES_ADJUSTED,300)
+        self.gph = calc_gpha(ds.TEMP_ADJUSTED,ds.PSAL_ADJUSTED,ds.PRES_ADJUSTED,MAXZ)
 
         if full:
             coords = {'pressure': ds.PRES_ADJUSTED}
@@ -45,7 +45,7 @@ class Profile():
 
 class MEOP():
 
-    def __init__(self,extent):
+    def __init__(self,extent,minz=0):
 
         self.extent = extent
 
@@ -75,7 +75,7 @@ class MEOP():
                 (profile.LONGITUDE >= extent[0])
         )
 
-    def load_profiles(self):
+    def load_profiles(self,full=False):
 
         # define methods to retrieve info one each profile
         deployment = lambda platform: str.split(platform,'-')[0]
@@ -93,7 +93,7 @@ class MEOP():
 
             if any(in_area):
                 for n in ds.N_PROF.where(in_area,drop=True):
-                    profiles.append(Profile(ds.sel(N_PROF=int(n)),fname))
+                    profiles.append(Profile(ds.sel(N_PROF=int(n)),fname,full=full))
 
         self.profiles = profiles
 
