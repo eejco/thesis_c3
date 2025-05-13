@@ -43,6 +43,14 @@ class Profile():
                 'salinity': xr.DataArray(ds.PSAL_ADJUSTED, coords=coords)}
             )
 
+    def get(self,property: str):
+        if (property is 'longitude') or (property is 'lon'):
+            return self.longitude
+        elif (property is 'latitude') or (property is 'lat'):
+            return self.latitude
+        else:
+            ValueError('No property with the name {}'.format(property))
+
 class MEOP():
 
     def __init__(self,extent,minz=0):
