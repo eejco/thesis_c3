@@ -2,11 +2,15 @@ import pandas as pd
 import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import cartopy.crs as ccrs
 
 from tqdm import tqdm
 from itertools import compress
 from gsw import density
 
+from stericheight.plotting_fns import PlottingFns
+pfns = PlottingFns()
 
 ROOT = '/nfs/b0133/eejco/data/MEOP_2024/media/disk2/roquet/MEOP_public/MEOP-CTD_2024-03-08/'
 FNAME_PROFILES = ROOT + 'list_profiles.csv'
@@ -210,4 +214,127 @@ class MEOP():
 
         print('merging...')
         self.gridded_profiles = xr.merge(dses)
+
+    def dissect_month(self,ts,background_da,ns_section_lat=140,tmin=-2.2,tmax=-0.9,smin=33.8,smax=34.8):
+
+        # in order to combine many profiles to create a transect, we need to interpolate them onto the same vertical grid
+        # create a pressure index using the most commonly occurring values for profiles
+        allpres = np.concatenate([p.ds.pressure.to_numpy() for p in self.profiles])
+        values, counts = np.unique(allpres[~np.isnan(allpres)], return_counts=True)
+        pressure_df = pd.DataFrame(counts,values)
+        pressure_axis= pressure_df[(pressure_df>1000).to_numpy().transpose().flatten()].index.to_numpy()
+
+        # function to take a profile and turn it into a ds with uniform z-axis and tagged with the longitude
+        def reindex_profile(profile,dim='longitude'):
+            return profile.ds \
+                    .rename({'N_LEVELS':'pressure'}) \
+                    .dropna(dim='pressure',how='all') \
+                    .interp(coords={'pressure':pressure_axis}) \
+                    .assign_coords({dim:profile.get(dim)}) \
+                    .expand_dims(dim)
+        
+        # Set up figre
+        fig = plt.figure(figsize=(24,14))
+        axs=[]
+
+        gs = fig.add_gridspec(3,6)
+
+        # Restrict data to within our chosen month
+        print('Preparing data...')
+        profiles = self.filter_profiles(ts,ts+pd.DateOffset(months=1))
+        profiles_df = self.df[(self.df.index > ts) & (self.df.index < ts+pd.DateOffset(months=1))]
+
+        # Extract profile data
+        dses = []
+        for p in tqdm(profiles):
+            if not (np.all(np.isnan(p.ds.temperature)) and np.all(np.isnan(p.ds.salinity))):
+                dses.append(reindex_profile(p))
+
+        ds = xr.merge(dses)
+
+        # Get data for selected transect
+        print('Preparing data for n-s transect...')
+        dses_transect = []
+        for p in tqdm(profiles):
+            if not (np.all(np.isnan(p.ds.temperature)) and np.all(np.isnan(p.ds.salinity))):
+                if (p.longitude > (ns_section_lat - 0.2)) and (p.longitude < (ns_section_lat + 0.2)):
+                    dses_transect.append(reindex_profile(p,dim='latitude'))
+
+        ds_transect = xr.merge(dses_transect)
+
+        print('Creating figures...')
+        # FIG A) SLA + PROFILE LOCATION
+        axs.append(fig.add_subplot(gs[0,0:4],projection=ccrs.Mercator()))
+
+        im=pfns.sp(ax=axs[0],da=background_da.sel(time=ts),extent=self.extent,vmax=10)
+        axs[0].scatter(profiles_df.longitude, profiles_df.latitude, transform=ccrs.PlateCarree())
+        axs[0].set_title(ts)
+        cbar = plt.colorbar(im, label='SLA')
+
+        axs[0].add_patch(mpatches.Rectangle(xy=[ns_section_lat-0.2, self.extent[2]],
+                                    width=0.4,
+                                    height=self.extent[3]-self.extent[2],
+                                    facecolor='none', edgecolor='r',
+                                    transform=ccrs.PlateCarree()))
+
+        # FIG B) COASTAL TRANSECT
+        axs.append(fig.add_subplot(gs[1,0:4]))
+        ds.temperature.plot.contourf(ax=axs[1],x='longitude',y='pressure',vmin=tmin,vmax=tmax,cmap='magma')
+        axs[1].invert_yaxis()
+        axs[1].set_xlabel('Longitude')
+        axs[1].set_ylabel('Pressure/dbar')
+
+        # FIG C) MEAN TEMPERATURE PROFILE
+        axs.append(fig.add_subplot(gs[0:2,4]))
+
+        for lon in ds.longitude:
+            ds_ = ds.sel(longitude=lon)
+            axs[2].plot(ds_.temperature,ds_.pressure,color='thistle')
+        ds_mean=ds.mean('longitude')
+        axs[2].plot(ds_mean.temperature,ds_mean.pressure,color='mediumvioletred')
+        axs[2].invert_yaxis()
+        axs[2].set_ylabel('Pressure')
+        axs[2].set_xlabel('Temperature')
+        axs[2].set_xlim([tmin,tmax])
+
+        # FIG d) MEAN salinity PROFILE
+        axs.append(fig.add_subplot(gs[0:2,5]))
+
+        for lon in ds.longitude:
+            ds_ = ds.sel(longitude=lon)
+            axs[3].plot(ds_.salinity,ds_.pressure,color='lightblue')
+        ds_mean=ds.mean('longitude')
+        axs[3].plot(ds_mean.salinity,ds_mean.pressure,color='steelblue')
+        axs[3].invert_yaxis()
+        axs[3].set_ylabel('Pressure')
+        axs[3].set_xlabel('Salinity')
+        axs[3].set_xlim([smin,smax])
+
+        # FIG E) T-S PLOT
+        axs.append(fig.add_subplot(gs[2,0:2]))
+        for profile in profiles:
+            im=axs[4].scatter(profile.ds.salinity,profile.ds.temperature,5,profile.ds.pressure,vmin=0,vmax=500,cmap='winter')
+        axs[4].set_ylim([tmin,tmax])
+        axs[4].set_xlim([smin,smax])
+        cbar = plt.colorbar(im, label='Pressure')
+
+        # FIG F) N-S Transect Temperature
+        axs.append(fig.add_subplot(gs[2,2:4]))
+        ds_transect.temperature.plot.contourf(ax=axs[5],x='latitude',y='pressure',vmin=tmin,vmax=tmax,cmap='magma')
+        axs[5].invert_yaxis()
+        axs[5].set_xlabel('Latitude')
+        axs[5].set_ylabel('Pressure/dbar')
+        axs[5].set_title('N-S transect at {}E'.format(ns_section_lat))
+
+        # FIG F) N-S Transect Salinity
+        axs.append(fig.add_subplot(gs[2,4:6]))
+        ds_transect.salinity.plot.contourf(ax=axs[6],x='latitude',y='pressure',vmin=smin,vmax=smax)
+        axs[6].invert_yaxis()
+        axs[6].set_xlabel('Latitude')
+        axs[6].set_ylabel('Pressure/dbar')
+        axs[6].set_title('N-S transect at {}E'.format(ns_section_lat))
+
+        print('Rendering..')
+
+        plt.tight_layout()
 
