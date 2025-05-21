@@ -38,7 +38,7 @@ class Profile():
         self.longitude = ds.LONGITUDE.item()
         self.time = np.datetime64(ds.JULD.item().strftime('%Y-%m-%dT%H:%M:%S'))
         self.filename = filename
-        self.gph = calc_gpha(ds.TEMP_ADJUSTED,ds.PSAL_ADJUSTED,ds.PRES_ADJUSTED,MAXZ)
+        #self.gph = calc_gpha(ds.TEMP_ADJUSTED,ds.PSAL_ADJUSTED,ds.PRES_ADJUSTED,MAXZ)
 
         if full:
             coords = {'pressure': ds.PRES_ADJUSTED}
@@ -48,9 +48,9 @@ class Profile():
             )
 
     def get(self,property: str):
-        if (property is 'longitude') or (property is 'lon'):
+        if (property == 'longitude') or (property == 'lon'):
             return self.longitude
-        elif (property is 'latitude') or (property is 'lat'):
+        elif (property == 'latitude') or (property == 'lat'):
             return self.latitude
         else:
             ValueError('No property with the name {}'.format(property))
@@ -105,21 +105,21 @@ class MEOP():
 
             if any(in_area):
                 for n in ds.N_PROF.where(in_area,drop=True):
-                    profiles.append(Profile(ds.sel(N_PROF=int(n)),fname,full=full))
+                    ds_ = ds.sel(N_PROF=int(n))
 
-        self.profiles = profiles
+                    if not (np.all(np.isnan(ds_.TEMP_ADJUSTED)) or np.all(np.isnan(ds_.PSAL_ADJUSTED))):
+                        coords = {'pressure': ds_.PRES_ADJUSTED}
 
-        lats = [p.latitude for p in profiles]
-        lons = [p.longitude for p in profiles]
-        filename = [p.filename for p in profiles]
-        gph = [p.gph for p in profiles]
-        times = [p.time for p in profiles]
+                        vars = {'latitude':ds_.LATITUDE.item(),
+                                'longitude':ds_.LONGITUDE.item(),
+                                'time':np.datetime64(ds_.JULD.item().strftime('%Y-%m-%dT%H:%M:%S')),
+                                'filename':fname,
+                                'temperature':[xr.DataArray(ds_.TEMP_ADJUSTED, coords=coords)],
+                                'salinity':[xr.DataArray(ds_.PSAL_ADJUSTED, coords=coords)]
+                        }
+                        profiles.append(vars)
 
-        self.df = pd.DataFrame({'latitude':lats,
-                                'longitude':lons,
-                                'filename':filename,
-                                'gph':gph},
-                                index=times)
+        self.df = pd.DataFrame(profiles).set_index('time')
 
     def filter_profiles(self,start,end):
         filtered_profiles=[]
