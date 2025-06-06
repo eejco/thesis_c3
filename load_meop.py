@@ -87,7 +87,20 @@ class MEOP():
                 (profile.LONGITUDE >= extent[0])
         )
 
-    def load_profiles(self,full=False):
+    def load_profiles(self):
+        def calc_gpha(t,s,p,maxz):
+            try:
+                crop = lambda da: da.where(p<maxz,drop=True)
+                rho = density.rho(crop(s),crop(t),crop(p))
+                rho_ref = density.rho(35,0,crop(p))
+
+                vs = (1/rho - 1/rho_ref)/9.82
+                pres_pa = crop(p) * 10000
+
+                vs = vs.assign_coords({'PRES_PA':pres_pa})
+                return vs.integrate('PRES_PA').item()
+            except:
+                return np.nan
 
         # define methods to retrieve info one each profile
         deployment = lambda platform: str.split(platform,'-')[0]
@@ -106,16 +119,20 @@ class MEOP():
             if any(in_area):
                 for n in ds.N_PROF.where(in_area,drop=True):
                     ds_ = ds.sel(N_PROF=int(n))
+                    t = ds_.TEMP_ADJUSTED
+                    s = ds_.PSAL_ADJUSTED
+                    p = ds_.PRES_ADJUSTED
 
-                    if not (np.all(np.isnan(ds_.TEMP_ADJUSTED)) or np.all(np.isnan(ds_.PSAL_ADJUSTED))):
-                        coords = {'pressure': ds_.PRES_ADJUSTED}
+                    if not (np.all(np.isnan(t)) or np.all(np.isnan(s))):
+                        coords = {'pressure': p}
 
                         vars = {'latitude':ds_.LATITUDE.item(),
                                 'longitude':ds_.LONGITUDE.item(),
                                 'time':np.datetime64(ds_.JULD.item().strftime('%Y-%m-%dT%H:%M:%S')),
                                 'filename':fname,
-                                'temperature':[xr.DataArray(ds_.TEMP_ADJUSTED, coords=coords)],
-                                'salinity':[xr.DataArray(ds_.PSAL_ADJUSTED, coords=coords)]
+                                'temperature':[xr.DataArray(t, coords=coords)],
+                                'salinity':[xr.DataArray(s, coords=coords)],
+                                'gph':calc_gpha(t,s,p,MAXZ)
                         }
                         profiles.append(vars)
 
