@@ -4,6 +4,7 @@ import xarray as xr
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import cmocean
+import gsw
 import xesmf as xe
 import matplotlib.patches as mpatches
 import seaborn as sns
@@ -22,13 +23,15 @@ class Composite():
 
         self.has_meop=False
 
-    def add_meop(self,meop,tlims=None,slims=None):
+    def add_meop(self,meop,tlims=None,slims=None,lag=0):
+        # need to interpolate profiles onto the same z axis so create common pressure dimensin
         allpres = np.concatenate([p[0].pressure for p in meop.df.temperature])
         values, counts = np.unique(allpres[~np.isnan(allpres)], return_counts=True)
         pressure_df = pd.DataFrame(counts,values)
         self.pressure_axis= pressure_df[(pressure_df>1000).to_numpy().transpose().flatten()].index.to_numpy()
-        self.t_pos, self.s_pos, self.df_pos = self.__get_posneg_ts(meop,self.idx_positive)
-        self.t_neg, self.s_neg, self.df_neg = self.__get_posneg_ts(meop,self.idx_negative)
+
+        self.t_pos, self.s_pos, self.df_pos = self.__get_posneg_ts(meop,self.idx_positive,lag)
+        self.t_neg, self.s_neg, self.df_neg = self.__get_posneg_ts(meop,self.idx_negative,lag)
 
         self.df_both = pd.concat([self.df_pos,self.df_neg])
 
@@ -82,7 +85,7 @@ class Composite():
             plt.colorbar(im1)
             plt.colorbar(im2)
     # filter profiles
-    def __get_posneg_ts(self,meop,idx_in):
+    def __get_posneg_ts(self,meop,idx_in,lag=0):
         # function to take a profile and turn it into a ds with uniform z-axis and tagged with the longitude
         def reindex_profile(profile,time):
             return profile \
@@ -91,6 +94,10 @@ class Composite():
                     .interp(coords={'pressure':self.pressure_axis}) \
                     .assign_coords({'time':time}) \
                     .expand_dims('time')
+        
+        #apply lag
+        idx_in['time'] = pd.to_datetime(idx_in.time.values) + pd.DateOffset(months=lag)
+
         df_months = meop.df.index.to_period('M')
         months = pd.PeriodIndex(idx_in.time.where(idx_in,drop=True).values.astype('datetime64[M]'),freq='M')
         filtered_df = meop.df[df_months.isin(months)].dropna()
@@ -111,12 +118,24 @@ class Composite():
         return filtered_temp,filtered_psal, filtered_df
     
     def ts_density(self,axs):
+        # set up lines of equal density
+        sig0_n = 100
+        temprange = np.linspace(self.tlims[0],self.tlims[1],sig0_n)
+        psalrange = np.linspace(self.slims[0],self.slims[1],sig0_n)
+
+        sig0range = np.zeros((sig0_n,sig0_n))
+        for i,t in enumerate(temprange):
+            for j,s in enumerate(psalrange):
+                sig0range[i,j]=gsw.sigma0(s,gsw.CT_from_t(s,t,0))
+
         def ts_axes(ax,im,n):
             ax.set_ylim(self.tlims)
             ax.set_xlim(self.slims)
             ax.set_xlabel('Salinity')
             ax.set_ylabel('Temperature')
             ax.set_title('total no. profiles: ' +str(n))
+            cs=ax.contour(psalrange,temprange,sig0range,levels=4,colors='grey',linewidths=1)
+            plt.clabel(cs, fontsize=10, inline=1, fmt='%0.1f')
 
         ts_axes(axs[0],sns.kdeplot(ax=axs[0],x=self.s_pos.values.flatten(), y=self.t_pos.values.flatten(),fill=True, cbar=True),len(self.s_pos))
         ts_axes(axs[1],sns.kdeplot(ax=axs[1],x=self.s_neg.values.flatten(), y=self.t_neg.values.flatten(),fill=True, cbar=True),len(self.s_neg))
@@ -150,5 +169,6 @@ class Composite():
             ax1.set_ylabel('Total number of profiles')
 
         single(axs[0],axs[1],self.t_pos.time)
+    
         single(axs[2],axs[3],self.t_neg.time)
             
