@@ -87,7 +87,7 @@ class MEOP():
                 (profile.LONGITUDE >= extent[0])
         )
 
-    def load_profiles(self):
+    def load_profiles(self, profile_code=None):
         def calc_gpha(t,s,p,maxz):
             try:
                 crop = lambda da: da.where(p<maxz,drop=True)
@@ -110,7 +110,7 @@ class MEOP():
 
         # gather profiles in desired area, discard others
         profiles = []
-        for pc in tqdm(self.profile_codes):
+        for pc in tqdm(self.profile_codes if profile_code==None else [profile_code]):
             fname = folder(pc)+filename(pc)
             ds = xr.open_dataset(fname)
 
@@ -126,7 +126,8 @@ class MEOP():
                     if not (np.all(np.isnan(t)) or np.all(np.isnan(s))):
                         coords = {'pressure': p}
 
-                        vars = {'latitude':ds_.LATITUDE.item(),
+                        vars = {'platform':pc,
+                                'latitude':ds_.LATITUDE.item(),
                                 'longitude':ds_.LONGITUDE.item(),
                                 'time':np.datetime64(ds_.JULD.item().strftime('%Y-%m-%dT%H:%M:%S')),
                                 'filename':fname,
@@ -136,7 +137,10 @@ class MEOP():
                         }
                         profiles.append(vars)
 
-        self.df = pd.DataFrame(profiles).set_index('time')
+        if profile_code == None:
+            self.df = pd.DataFrame(profiles).set_index('time')
+        else:
+            return pd.DataFrame(profiles).set_index('time')
 
     def filter_profiles(self,start,end):
         filtered_profiles=[]
