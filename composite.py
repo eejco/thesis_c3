@@ -9,6 +9,7 @@ import xesmf as xe
 import matplotlib.patches as mpatches
 import seaborn as sns
 from stericheight.plotting_fns import PlottingFns
+from load_meop import MEOP
 
 
 class Composite():
@@ -24,11 +25,7 @@ class Composite():
         self.has_meop=False
 
     def add_meop(self,meop,tlims=None,slims=None,lag=0):
-        # need to interpolate profiles onto the same z axis so create common pressure dimensin
-        allpres = np.concatenate([p[0].pressure for p in meop.df.temperature])
-        values, counts = np.unique(allpres[~np.isnan(allpres)], return_counts=True)
-        pressure_df = pd.DataFrame(counts,values)
-        self.pressure_axis= pressure_df[(pressure_df>1000).to_numpy().transpose().flatten()].index.to_numpy()
+        self.pressure_axis= meop.pressure_axis
 
         self.t_pos, self.s_pos, self.df_pos = self.__get_posneg_ts(meop,self.idx_positive,lag)
         self.t_neg, self.s_neg, self.df_neg = self.__get_posneg_ts(meop,self.idx_negative,lag)
@@ -85,16 +82,7 @@ class Composite():
             plt.colorbar(im1)
             plt.colorbar(im2)
     # filter profiles
-    def __get_posneg_ts(self,meop,idx_in,lag=0):
-        # function to take a profile and turn it into a ds with uniform z-axis and tagged with the longitude
-        def reindex_profile(profile,time):
-            return profile \
-                    .rename({'N_LEVELS':'pressure'}) \
-                    .dropna(dim='pressure',how='all') \
-                    .interp(coords={'pressure':self.pressure_axis}) \
-                    .assign_coords({'time':time}) \
-                    .expand_dims('time')
-        
+    def __get_posneg_ts(self,meop: MEOP,idx_in,lag=0):
         #apply lag
         idx_in['time'] = pd.to_datetime(idx_in.time.values) + pd.DateOffset(months=lag)
 
@@ -102,20 +90,7 @@ class Composite():
         months = pd.PeriodIndex(idx_in.time.where(idx_in,drop=True).values.astype('datetime64[M]'),freq='M')
         filtered_df = meop.df[df_months.isin(months)].dropna()
 
-        #remove duplicates
-        #not very nice.. think about this more later
-        filtered_df = filtered_df[~filtered_df.index.duplicated(keep='first')]
-
-        temps_list = [reindex_profile(p[0],l) for p,l in zip(filtered_df.temperature, filtered_df.index)]
-        psal_list = [reindex_profile(p[0],l) for p,l in zip(filtered_df.salinity, filtered_df.index)]
-
-        #try:
-        filtered_temp = xr.merge(temps_list).TEMP_ADJUSTED
-        filtered_psal = xr.merge(psal_list).PSAL_ADJUSTED
-        # except:
-        #     filtered_temp = temps_list
-        #     filtered_psal = psal_list
-        return filtered_temp,filtered_psal, filtered_df
+        return meop.reindex_profiles(filtered_df)
     
     def ts_density(self,axs):
         # set up lines of equal density

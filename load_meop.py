@@ -18,43 +18,6 @@ FNAME_TAGS = ROOT + 'list_tags.csv'
 FNAME_DEPLOYMENTS = ROOT + 'list_deployments.csv'
 MAXZ = 300
 
-class Profile():
-    def __init__(self,ds,filename,full=False):
-        def calc_gpha(t,s,p,maxz):
-            try:
-                crop = lambda da: da.where(p<maxz,drop=True)
-                rho = density.rho(crop(s),crop(t),crop(p))
-                rho_ref = density.rho(35,0,crop(p))
-
-                vs = (1/rho - 1/rho_ref)/9.82
-                pres_pa = crop(p) * 10000
-
-                vs = vs.assign_coords({'PRES_PA':pres_pa})
-                return vs.integrate('PRES_PA').item()
-            except:
-                return np.nan
-
-        self.latitude = ds.LATITUDE.item()
-        self.longitude = ds.LONGITUDE.item()
-        self.time = np.datetime64(ds.JULD.item().strftime('%Y-%m-%dT%H:%M:%S'))
-        self.filename = filename
-        #self.gph = calc_gpha(ds.TEMP_ADJUSTED,ds.PSAL_ADJUSTED,ds.PRES_ADJUSTED,MAXZ)
-
-        if full:
-            coords = {'pressure': ds.PRES_ADJUSTED}
-            self.ds = xr.Dataset(
-                {'temperature': xr.DataArray(ds.TEMP_ADJUSTED, coords=coords),
-                'salinity': xr.DataArray(ds.PSAL_ADJUSTED, coords=coords)}
-            )
-
-    def get(self,property: str):
-        if (property == 'longitude') or (property == 'lon'):
-            return self.longitude
-        elif (property == 'latitude') or (property == 'lat'):
-            return self.latitude
-        else:
-            ValueError('No property with the name {}'.format(property))
-
 class MEOP():
 
     def __init__(self,extent,minz=0):
@@ -137,10 +100,16 @@ class MEOP():
                         }
                         profiles.append(vars)
 
-        if profile_code == None:
-            self.df = pd.DataFrame(profiles).set_index('time')
-        else:
-            return pd.DataFrame(profiles).set_index('time')
+        df = pd.DataFrame(profiles).set_index('time')
+
+        # prepare common pressure dimension
+        allpres = np.concatenate([p[0].pressure for p in df.temperature])
+        values, counts = np.unique(allpres[~np.isnan(allpres)], return_counts=True)
+        pressure_df = pd.DataFrame(counts,values)
+        self.pressure_axis= pressure_df[(pressure_df>1000).to_numpy().transpose().flatten()].index.to_numpy()
+
+        self.df = df
+        return df
 
     def filter_profiles(self,start,end):
         filtered_profiles=[]
@@ -359,3 +328,27 @@ class MEOP():
 
         plt.tight_layout()
 
+    def reindex_profiles(self,df=None):
+        def reindex_single_profile(profile,time):
+            return profile \
+                    .swap_dims({'N_LEVELS':'pressure'}) \
+                    .dropna(dim='pressure',how='all') \
+                    .interp(coords={'pressure':self.pressure_axis}) \
+                    .assign_coords({'time':time}) \
+                    .expand_dims('time')
+        if df is None:
+            df = self.df
+        #remove duplicates
+        #not very nice.. think about this more later
+        filtered_df = df[~df.index.duplicated(keep='first')]
+
+        print('reindexing temps..')
+        temps_list = [reindex_single_profile(p[0],l) for p,l in zip(filtered_df.temperature, filtered_df.index)]
+        print('reindexing psals...')
+        psal_list = [reindex_single_profile(p[0],l) for p,l in zip(filtered_df.salinity, filtered_df.index)]
+
+        print('merging...')
+        temp_da = xr.merge(temps_list).TEMP_ADJUSTED
+        psal_da = xr.merge(psal_list).PSAL_ADJUSTED
+
+        return temp_da, psal_da, filtered_df
