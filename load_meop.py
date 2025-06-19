@@ -73,6 +73,7 @@ class MEOP():
 
         # gather profiles in desired area, discard others
         profiles = []
+        self.example_profile = None
         for pc in tqdm(self.profile_codes if profile_code==None else [profile_code]):
             fname = folder(pc)+filename(pc)
             ds = xr.open_dataset(fname)
@@ -86,19 +87,33 @@ class MEOP():
                     s = ds_.PSAL_ADJUSTED
                     p = ds_.PRES_ADJUSTED
 
-                    if not (np.all(np.isnan(t)) or np.all(np.isnan(s))):
-                        coords = {'pressure': p}
+                    #filter for quality
+                    qc_test = lambda qc: qc.astype(str).astype(int) == 1
+                    qc_filter = qc_test(ds_.TEMP_QC) & qc_test(ds_.PSAL_QC) & qc_test(ds_.PRES_QC)
 
-                        vars = {'platform':pc,
-                                'latitude':ds_.LATITUDE.item(),
-                                'longitude':ds_.LONGITUDE.item(),
-                                'time':np.datetime64(ds_.JULD.item().strftime('%Y-%m-%dT%H:%M:%S')),
-                                'filename':fname,
-                                'temperature':[xr.DataArray(t, coords=coords)],
-                                'salinity':[xr.DataArray(s, coords=coords)],
-                                'gph':calc_gpha(t,s,p,MAXZ)
-                        }
-                        profiles.append(vars)
+                    if np.any(qc_filter):
+                        print(str(qc_filter.values.sum()) + ' out of ' + str(len(p)) + ' retained')
+                        p = p.where(qc_filter,drop=True)
+                        t = t.where(qc_filter,drop=True)
+                        s = s.where(qc_filter,drop=True)
+
+                        if not (np.all(np.isnan(t)) or np.all(np.isnan(s))):
+                            coords = {'pressure': p}
+
+                            vars = {'platform':pc,
+                                    'latitude':ds_.LATITUDE.item(),
+                                    'longitude':ds_.LONGITUDE.item(),
+                                    'time':np.datetime64(ds_.JULD.item().strftime('%Y-%m-%dT%H:%M:%S')),
+                                    'filename':fname,
+                                    'temperature':[xr.DataArray(t, coords=coords)],
+                                    'salinity':[xr.DataArray(s, coords=coords)],
+                                    # 'pressure_qc':[xr.DataArray(p_qc,coords=coords)],
+                                    # 'temperature_qc':[xr.DataArray(t_qc,coords=coords)],
+                                    # 'salinity_qc':[xr.DataArray(s_qc,coords=coords)],
+                                    'gph':calc_gpha(t,s,p,MAXZ),
+                                    'nlevels':len(p)
+                            }
+                            profiles.append(vars)
 
         df = pd.DataFrame(profiles).set_index('time')
 
