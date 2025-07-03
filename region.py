@@ -143,18 +143,17 @@ class Region():
             cmap=cmocean.cm.deep_r
         
         title = "{0} for {1}".format(da_lbl,self.name)
-        
-        createfig = ax is None
-        
+                
         if ax == None:
             fig,ax = plt.subplots(figsize=(8,6),subplot_kw={'projection': ccrs.SouthPolarStereo()})
 
-        if vmax is None:
-            if not vmin is None:
-                vmax = -vmin
+            if vmax is None:
+                if not vmin is None:
+                    vmax = -vmin
 
-        pfns = PlottingFns()
-        im1 = pfns.sp(ax,da,vmin=vmin,vmax=vmax,title=title,cbar=da_lbl,cbar_orientation="vertical",cmap=cmap,sea=sea,bathy=self.elevation,extent=extent)
+            pfns = PlottingFns()
+            im1 = pfns.sp(ax,da,vmin=vmin,vmax=vmax,title=title,cbar=da_lbl,cbar_orientation="vertical",cmap=cmap,sea=sea,bathy=self.elevation,extent=extent)
+
         if self.wrapped:
             cr_pos,cr_neg = self.crop_da(return_posneg=True)#xr.ones_like(self.elevation).where(
             im3 = cr_neg.plot(ax=ax,add_colorbar=False,cmap=cmocean.cm.matter,x='longitude',y='latitude',transform=ccrs.PlateCarree(),alpha=0.70)#,hatches='xx')
