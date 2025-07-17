@@ -23,21 +23,42 @@ class Composite():
         self.idx_data=idx_data
 
         self.has_meop=False
+        self.has_spira=False
 
     def add_meop(self,meop,tlims=None,slims=None,lag=0):
-        self.pressure_axis= meop.pressure_axis
+        if not self.has_spira:
+            self.pressure_axis= meop.pressure_axis
 
-        self.t_pos, self.s_pos, self.df_pos = self.__get_posneg_ts(meop,self.idx_positive,lag)
-        self.t_neg, self.s_neg, self.df_neg = self.__get_posneg_ts(meop,self.idx_negative,lag)
+            self.t_pos, self.s_pos, self.df_pos = self.__get_posneg_ts(meop,self.idx_positive,lag)
+            self.t_neg, self.s_neg, self.df_neg = self.__get_posneg_ts(meop,self.idx_negative,lag)
 
-        self.df_both = pd.concat([self.df_pos,self.df_neg])
+            self.df_both = pd.concat([self.df_pos,self.df_neg])
 
-        lims = lambda pos,neg: [min(pos.min().item(),neg.min().item()),max(pos.max().item(),neg.max().item())]
-        self.tlims = tlims or lims(self.t_pos,self.t_neg)
-        self.slims = slims or lims(self.s_pos,self.s_neg)
+            lims = lambda pos,neg: [min(pos.min().item(),neg.min().item()),max(pos.max().item(),neg.max().item())]
+            self.tlims = tlims or lims(self.t_pos,self.t_neg)
+            self.slims = slims or lims(self.s_pos,self.s_neg)
 
-        self.has_meop=True
+            self.has_meop=True
+        else:
+            KeyError('Already constructed using SPIRA')
 
+    def add_spira(self,spira,tlims=None,slims=None,lag=0):
+        if not self.has_meop:
+            self.pressure_axis= spira.pres.values
+
+            spira=spira.rename({'pres':'pressure'})
+            self.t_pos, self.s_pos, self.ds_pos = self.__get_posneg_tsp(spira,self.idx_positive,lag)
+            self.t_neg, self.s_neg, self.ds_neg = self.__get_posneg_tsp(spira,self.idx_negative,lag)
+
+            #self.ds_both = pd.concat([self.df_pos,self.df_neg])
+
+            lims = lambda pos,neg: [min(pos.min().item(),neg.min().item()),max(pos.max().item(),neg.max().item())]
+            self.tlims = tlims or lims(self.t_pos,self.t_neg)
+            self.slims = slims or lims(self.s_pos,self.s_neg)
+
+            self.has_spira=True
+        else:
+            KeyError('Already constructed using MEOP')
 
     def composite_timeseries(self,ax,background_data=None,bg_name='',ylim=[-12,12]):
         '''
@@ -91,6 +112,25 @@ class Composite():
         filtered_df = meop.df[df_months.isin(months)].dropna()
 
         return meop.reindex_profiles(filtered_df)
+    
+    def __get_posneg_tsp(self,spira: xr.Dataset,idx_in,lag=0):
+        #apply lag
+        idx_in['time'] = pd.to_datetime(idx_in.time.values) + pd.DateOffset(months=lag)
+
+        ds_months = pd.PeriodIndex(pd.to_datetime(spira.time.values),freq='M')
+
+        months = pd.PeriodIndex(idx_in.time.where(idx_in,drop=True).values.astype('datetime64[M]'),freq='M')
+        spira['idx'] = xr.DataArray(data=ds_months.isin(months),coords={'time':spira.time})
+
+        filtered_ds = spira.where(spira.idx,drop=True)
+
+        # temp = filtered_ds.temp.values.flatten()
+        # psal = filtered_ds.psal.values.flatten()
+        # time, pres = np.meshgrid(filtered_ds.time.values,filtered_ds)
+        # time = time.flatten()
+        # pres = pres.flatten()
+
+        return filtered_ds.temp, filtered_ds.psal, filtered_ds
     
     def ts_density(self,axs):
         # set up lines of equal density
@@ -146,4 +186,39 @@ class Composite():
         single(axs[0],axs[1],self.t_pos.time)
     
         single(axs[2],axs[3],self.t_neg.time)
+
+    def build_sns_data(self):
+        print('preparing data')
+        tm_pos,p_pos = np.meshgrid(self.t_pos.time,self.t_pos.pressure)
+        tm_neg,p_neg = np.meshgrid(self.t_neg.time,self.t_neg.pressure)
+        p_pos = p_pos.flatten()
+        p_neg=p_neg.flatten()
+        tm_pos = tm_pos.flatten()
+        tm_neg = tm_neg.flatten()
+        rho_pos = gsw.density.sigma0(self.s_pos.values,self.t_pos.values).flatten()
+        rho_neg = gsw.density.sigma0(self.s_neg.values,self.t_neg.values).flatten()
+        get_month = lambda time: time.astype('datetime64[M]').astype(int) % 12 + 1
+        # def get_season(time):
+        #     month=get_month(time)
+        #     if month <= 3:
+        #         season = 'JFM'
+        #     elif month <=6:
+        #         season = 'AMJ'
+        #     elif month <=9:
+        #         season = 'JAS'
+        #     elif month <=12:
+        #         season = 'OND'
+        #     return season
+        # ssn_pos = [get_season(t) for t in tm_pos]
+        # ssn_neg = [get_season(t) for t in tm_neg]
+        self.sns_data = pd.DataFrame(data={'time':np.concatenate([tm_pos,tm_neg]),
+                              'temperature':np.concatenate([self.t_pos.values.flatten(),self.t_neg.values.flatten()]),
+                              'salinity':np.concatenate([self.s_pos.values.flatten(),self.s_neg.values.flatten()]),
+                              'pressure':-np.concatenate([p_pos,p_neg]),
+                              'sigma0': np.concatenate([rho_pos,rho_neg]),
+                              'SLA': ['+ SLA' for _ in tm_pos] + ['- SLA' for _ in tm_neg],
+                              'month': get_month(np.concatenate([tm_pos,tm_neg])),
+                              'year': pd.to_datetime(np.concatenate([tm_pos,tm_neg])).year
+                              })
+
             
