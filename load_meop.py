@@ -52,8 +52,7 @@ class MEOP():
                 (profile.LONGITUDE >= extent[0])
         )
     
-    def load_profiles_for_spira(self):
-        pressure_axis = np.arange(0,1000,2)
+    def load_profiles_for_spira(self,pressure_axis=np.arange(0,1002,2)):
          # define methods to retrieve info one each profile
         deployment = lambda platform: str.split(platform,'-')[0]
         country = lambda platform: str(self.deployments[self.deployments.DEPLOYMENT_CODE == deployment(platform)].COUNTRY.item())
