@@ -18,6 +18,8 @@ FNAME_TAGS = ROOT + 'list_tags.csv'
 FNAME_DEPLOYMENTS = ROOT + 'list_deployments.csv'
 MAXZ = 300
 
+FNAME_SPIRA = '../data/qc_profile_ds_2dbar.nc'
+
 class MEOP():
 
     def __init__(self,extent,minz=0):
@@ -49,8 +51,74 @@ class MEOP():
                 (profile.LONGITUDE <= extent[1]) &
                 (profile.LONGITUDE >= extent[0])
         )
+    
+    def load_profiles_for_spira(self):
+        pressure_axis = np.arange(0,1000,2)
+         # define methods to retrieve info one each profile
+        deployment = lambda platform: str.split(platform,'-')[0]
+        country = lambda platform: str(self.deployments[self.deployments.DEPLOYMENT_CODE == deployment(platform)].COUNTRY.item())
+        folder = lambda platform: ROOT + country(platform) + '/DATA/'
+        filename = lambda platform: platform + '_all_prof.nc'
 
-    def load_profiles(self, profile_code=None):
+        # gather profiles in desired area, discard others
+        coords = {
+            'pres': {'dims':'pres','data':pressure_axis},
+            'time': {'dims':'time','data':[]},
+            'lat': {'dims':'time','data':[]},
+            'lon': {'dims':'time','data':[]}
+        }
+        data_vars = {
+            'profile_code': {'dims':'time','data':[]},
+            'temp': {'dims':['time','pres'],'data':[]},
+            'psal': {'dims':['time','pres'],'data':[]},
+            'dsource': {'dims':'time','data':[]},
+        }
+        for pc in tqdm(self.profile_codes):
+            fname = folder(pc)+filename(pc)
+            ds = xr.open_dataset(fname)
+
+            in_area = self.is_in(ds,self.extent)
+
+            if any(in_area):
+                for n in ds.N_PROF.where(in_area,drop=True):
+                    ds_ = ds.sel(N_PROF=int(n))
+                    t = ds_.TEMP_ADJUSTED
+                    s = ds_.PSAL_ADJUSTED
+                    p = ds_.PRES_ADJUSTED
+
+                    #filter for quality
+                    qc_test = lambda qc: qc.astype(str).astype(int) == 1
+                    qc_filter = qc_test(ds_.TEMP_QC) & qc_test(ds_.PSAL_QC) & qc_test(ds_.PRES_QC)
+
+                    if np.any(qc_filter):
+                        #filter for quality
+                        p = p.where(qc_filter,drop=True)
+                        t = t.where(qc_filter,drop=True)
+                        s = s.where(qc_filter,drop=True)
+
+                        self.sample=t
+                        self.sample_ds = ds_
+                        #interpolate
+                        t = np.interp(pressure_axis,p,t,left=np.nan, right=np.nan)
+                        s = np.interp(pressure_axis,p,s,left=np.nan, right=np.nan)
+
+                        if not (np.all(np.isnan(t)) or np.all(np.isnan(s))):
+                            
+                            coords['time']['data'].append(np.datetime64(ds_.JULD.item().strftime('%Y-%m-%dT%H:%M:%S')))
+                            data_vars['profile_code']['data'].append(pc)
+                            coords['lat']['data'].append(ds_.LATITUDE.item())
+                            coords['lon']['data'].append(ds_.LONGITUDE.item())
+                            data_vars['dsource']['data'].append('MEOP-')
+                            data_vars['temp']['data'].append(t)
+                            data_vars['psal']['data'].append(s)
+
+        self.ds = xr.Dataset.from_dict({
+            'dims':['time','pres'],
+            'coords':coords,
+            'data_vars':data_vars})
+
+
+    def load_profiles(self, profile_code=None, pressure_axis=None, depth_average=False, to_ds=False):
         def calc_gpha(t,s,p,maxz):
             try:
                 crop = lambda da: da.where(p<maxz,drop=True)
@@ -92,7 +160,7 @@ class MEOP():
                     qc_filter = qc_test(ds_.TEMP_QC) & qc_test(ds_.PSAL_QC) & qc_test(ds_.PRES_QC)
 
                     if np.any(qc_filter):
-                        print(str(qc_filter.values.sum()) + ' out of ' + str(len(p)) + ' retained')
+                        #print(str(qc_filter.values.sum()) + ' out of ' + str(len(p)) + ' retained')
                         p = p.where(qc_filter,drop=True)
                         t = t.where(qc_filter,drop=True)
                         s = s.where(qc_filter,drop=True)
@@ -105,26 +173,43 @@ class MEOP():
                                     'longitude':ds_.LONGITUDE.item(),
                                     'time':np.datetime64(ds_.JULD.item().strftime('%Y-%m-%dT%H:%M:%S')),
                                     'filename':fname,
-                                    'temperature':[xr.DataArray(t, coords=coords)],
-                                    'salinity':[xr.DataArray(s, coords=coords)],
+                                    'temperature':[xr.DataArray(t, coords=coords)] if not depth_average else t[p < max(pressure_axis)].mean(),
+                                    'salinity':[xr.DataArray(s, coords=coords)] if not depth_average else s[p < max(pressure_axis)].mean(),
                                     # 'pressure_qc':[xr.DataArray(p_qc,coords=coords)],
                                     # 'temperature_qc':[xr.DataArray(t_qc,coords=coords)],
                                     # 'salinity_qc':[xr.DataArray(s_qc,coords=coords)],
-                                    'gph':calc_gpha(t,s,p,MAXZ),
+                                    # 'gph':calc_gpha(t,s,p,MAXZ),
                                     'nlevels':len(p)
                             }
                             profiles.append(vars)
 
         df = pd.DataFrame(profiles).set_index('time')
+        df['month'] = df.index.month
 
         # prepare common pressure dimension
-        allpres = np.concatenate([p[0].pressure for p in df.temperature])
-        values, counts = np.unique(allpres[~np.isnan(allpres)], return_counts=True)
-        pressure_df = pd.DataFrame(counts,values)
-        self.pressure_axis= pressure_df[(pressure_df>1000).to_numpy().transpose().flatten()].index.to_numpy()
+        if pressure_axis is None:
+            allpres = np.concatenate([p[0].pressure for p in df.temperature])
+            values, counts = np.unique(allpres[~np.isnan(allpres)], return_counts=True)
+            pressure_df = pd.DataFrame(counts,values)
+            self.pressure_axis= pressure_df[(pressure_df>1000).to_numpy().transpose().flatten()].index.to_numpy()
+        else:
+            self.pressure_axis=pressure_axis
 
         self.df = df
         return df
+
+    def get_season(self,season):
+        if season == 'summer':
+            return self.df[self.df.month.isin([1,2,3])]
+        elif season == 'autumn':
+            return self.df[self.df.month.isin([4,5,6])]
+        elif season == 'winter':
+            return self.df[self.df.month.isin([7,8,9])]
+        elif season == 'spring':
+            return self.df[self.df.month.isin([10,11,12])]
+        else:
+            ValueError('No such season as {}. Please choose [summer, autumn, winter, spring]'.format(season))
+
 
     def filter_profiles(self,start,end):
         filtered_profiles=[]
@@ -343,12 +428,15 @@ class MEOP():
 
         plt.tight_layout()
 
-    def reindex_profiles(self,df=None):
+    def reindex_profiles(self,df=None,pressure_axis=None):
+        if pressure_axis is None:
+            pressure_axis = self.pressure_axis
+
         def reindex_single_profile(profile,time):
             return profile \
                     .swap_dims({'N_LEVELS':'pressure'}) \
                     .dropna(dim='pressure',how='all') \
-                    .interp(coords={'pressure':self.pressure_axis}) \
+                    .interp(coords={'pressure':pressure_axis}) \
                     .assign_coords({'time':time}) \
                     .expand_dims('time')
         if df is None:
@@ -367,3 +455,5 @@ class MEOP():
         psal_da = xr.merge(psal_list).PSAL_ADJUSTED
 
         return temp_da, psal_da, filtered_df
+
+    #def add_spira(self):

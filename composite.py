@@ -25,12 +25,12 @@ class Composite():
         self.has_meop=False
         self.has_spira=False
 
-    def add_meop(self,meop,tlims=None,slims=None,lag=0):
+    def add_meop(self,meop,tlims=None,slims=None,lag=0,season='All'):
         if not self.has_spira:
             self.pressure_axis= meop.pressure_axis
 
-            self.t_pos, self.s_pos, self.df_pos = self.__get_posneg_ts(meop,self.idx_positive,lag)
-            self.t_neg, self.s_neg, self.df_neg = self.__get_posneg_ts(meop,self.idx_negative,lag)
+            self.t_pos, self.s_pos, self.df_pos = self.__get_posneg_ts(meop,self.idx_positive,lag,season)
+            self.t_neg, self.s_neg, self.df_neg = self.__get_posneg_ts(meop,self.idx_negative,lag,season)
 
             self.df_both = pd.concat([self.df_pos,self.df_neg])
 
@@ -76,7 +76,7 @@ class Composite():
         ax.legend(loc='best')
         ax.set_title('(a)',loc='left')
         ax.grid()
-        if self.has_meop:
+        if self.has_meop or self.has_spira:
             ax.plot(self.t_pos.time,[0 for i in self.t_pos],'x')
             ax.plot(self.t_neg.time,[0 for i in self.t_neg],'x')
 
@@ -103,13 +103,19 @@ class Composite():
             plt.colorbar(im1)
             plt.colorbar(im2)
     # filter profiles
-    def __get_posneg_ts(self,meop: MEOP,idx_in,lag=0):
+    def __get_posneg_ts(self,meop: MEOP,idx_in,lag=0, season='All'):
+
+        if not season=='All':
+            df = meop.get_season(season)
+        else:
+            df = meop.df
+
         #apply lag
         idx_in['time'] = pd.to_datetime(idx_in.time.values) + pd.DateOffset(months=lag)
 
-        df_months = meop.df.index.to_period('M')
+        df_months = df.index.to_period('M')
         months = pd.PeriodIndex(idx_in.time.where(idx_in,drop=True).values.astype('datetime64[M]'),freq='M')
-        filtered_df = meop.df[df_months.isin(months)].dropna()
+        filtered_df = df[df_months.isin(months)].dropna()
 
         return meop.reindex_profiles(filtered_df)
     
