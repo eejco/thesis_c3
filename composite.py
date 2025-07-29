@@ -204,6 +204,7 @@ class Composite():
         rho_pos = gsw.density.sigma0(self.s_pos.values,self.t_pos.values).flatten()
         rho_neg = gsw.density.sigma0(self.s_neg.values,self.t_neg.values).flatten()
         get_month = lambda time: time.astype('datetime64[M]').astype(int) % 12 + 1
+
         # def get_season(time):
         #     month=get_month(time)
         #     if month <= 3:
@@ -224,7 +225,8 @@ class Composite():
                               'sigma0': np.concatenate([rho_pos,rho_neg]),
                               'SLA': ['+ SLA' for _ in tm_pos] + ['- SLA' for _ in tm_neg],
                               'month': get_month(np.concatenate([tm_pos,tm_neg])),
-                              'year': pd.to_datetime(np.concatenate([tm_pos,tm_neg])).year
+                              'year': pd.to_datetime(np.concatenate([tm_pos,tm_neg])).year,
+                              #'Shelf': np.concatenate([self.ds_pos.shelf.values.flatten(),self.ds_neg.shelf.values.flatten()])
                               })
 
             
