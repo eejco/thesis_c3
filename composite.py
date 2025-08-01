@@ -13,24 +13,35 @@ from load_meop import MEOP
 
 
 class Composite():
-    def __init__(self,idx_data,idx_name,std_lim=0.5):
+    def __init__(self,idx_data,idx_name,std_lim=0.5,lagwindow=0):
         self.limit = idx_data.std() * std_lim
         self.limit_label = str(std_lim) + r'$\sigma$'
 
-        self.idx_positive = idx_data >= self.limit
-        self.idx_negative = idx_data <= -self.limit
+        self.idx_positive_without_lag = idx_data >= self.limit
+        self.idx_negative_without_lag = idx_data <= -self.limit
+
+        def get_lagwindow(arr: xr.DataArray,lagwindow: int):
+            arr_out = arr.copy()
+            for n in (np.arange(lagwindow) + 1):
+                shifted_arr = arr.shift({'time':n},0)
+                arr_out = arr_out | shifted_arr
+            return arr_out
+        
+        self.idx_positive_with_lag = get_lagwindow(self.idx_positive_without_lag,lagwindow)
+        self.idx_negative_with_lag = get_lagwindow(self.idx_negative_without_lag,lagwindow)
+
         self.idx_name=idx_name
         self.idx_data=idx_data
 
         self.has_meop=False
         self.has_spira=False
 
-    def add_meop(self,meop,tlims=None,slims=None,lag=0,season='All'):
+    def add_meop(self,meop,tlims=None,slims=None,season='All'):
         if not self.has_spira:
             self.pressure_axis= meop.pressure_axis
 
-            self.t_pos, self.s_pos, self.df_pos = self.__get_posneg_ts(meop,self.idx_positive,lag,season)
-            self.t_neg, self.s_neg, self.df_neg = self.__get_posneg_ts(meop,self.idx_negative,lag,season)
+            self.t_pos, self.s_pos, self.df_pos = self.__get_posneg_ts(meop,self.idx_positive_with_lag,season)
+            self.t_neg, self.s_neg, self.df_neg = self.__get_posneg_ts(meop,self.idx_negative_with_lag,season)
 
             self.df_both = pd.concat([self.df_pos,self.df_neg])
 
@@ -47,8 +58,8 @@ class Composite():
             self.pressure_axis= spira.pres.values
 
             spira=spira.rename({'pres':'pressure'})
-            self.t_pos, self.s_pos, self.ds_pos = self.__get_posneg_tsp(spira,self.idx_positive,lag)
-            self.t_neg, self.s_neg, self.ds_neg = self.__get_posneg_tsp(spira,self.idx_negative,lag)
+            self.t_pos, self.s_pos, self.ds_pos = self.__get_posneg_tsp(spira,self.idx_positive_with_lag)
+            self.t_neg, self.s_neg, self.ds_neg = self.__get_posneg_tsp(spira,self.idx_negative_with_lag)
 
             #self.ds_both = pd.concat([self.df_pos,self.df_neg])
 
@@ -69,8 +80,18 @@ class Composite():
 
         ax.plot(self.idx_data.time,self.idx_data,color='olive',label=self.idx_name)
         ax.plot(self.idx_data.time,np.zeros_like(self.idx_data),color='#373e02')
-        ax.fill_between(self.idx_data.time, 0,ylim[1], where=self.idx_positive, alpha=0.4, facecolor='darkkhaki',label='+/- '+ self.limit_label)
-        ax.fill_between(self.idx_data.time,ylim[0],0, where=self.idx_negative, alpha=0.4, facecolor='darkkhaki')
+
+        # highlight regions of positive and negative index
+        ax.fill_between(self.idx_data.time, 0,ylim[1], where=self.idx_positive_without_lag, alpha=0.4, facecolor='darkkhaki',label='+/- '+ self.limit_label)
+        ax.fill_between(self.idx_data.time,ylim[0],0, where=self.idx_negative_without_lag, alpha=0.4, facecolor='darkkhaki')
+        
+        # highlight regions of lagwindow
+        lagwindow_postive = self.idx_positive_with_lag & (~self.idx_positive_without_lag)
+        lagwindow_negative = self.idx_negative_with_lag & (~self.idx_negative_without_lag)
+
+        ax.fill_between(self.idx_data.time, 0,ylim[1], where=lagwindow_postive, alpha=0.4, facecolor='sandybrown',label='+/- '+ self.limit_label)
+        ax.fill_between(self.idx_data.time,ylim[0],0, where=lagwindow_negative, alpha=0.4, facecolor='sandybrown')
+
         ax.set_ylim(ylim)
         ax.set_ylabel(self.idx_name)
         ax.legend(loc='best')
@@ -103,7 +124,7 @@ class Composite():
             plt.colorbar(im1)
             plt.colorbar(im2)
     # filter profiles
-    def __get_posneg_ts(self,meop: MEOP,idx_in,lag=0, season='All'):
+    def __get_posneg_ts(self,meop: MEOP,idx_in, season='All'):
 
         if not season=='All':
             df = meop.get_season(season)
@@ -111,7 +132,7 @@ class Composite():
             df = meop.df
 
         #apply lag
-        idx_in['time'] = pd.to_datetime(idx_in.time.values) + pd.DateOffset(months=lag)
+        idx_in['time'] = pd.to_datetime(idx_in.time.values) #+ pd.DateOffset(months=lag)
 
         df_months = df.index.to_period('M')
         months = pd.PeriodIndex(idx_in.time.where(idx_in,drop=True).values.astype('datetime64[M]'),freq='M')
@@ -119,13 +140,19 @@ class Composite():
 
         return meop.reindex_profiles(filtered_df)
     
-    def __get_posneg_tsp(self,spira: xr.Dataset,idx_in,lag=0):
-        #apply lag
-        idx_in['time'] = pd.to_datetime(idx_in.time.values) + pd.DateOffset(months=lag)
+    def __get_posneg_tsp(self,spira: xr.Dataset,idx_in):
+        # format idx values and apply lag
+        idx_in['time'] = pd.to_datetime(idx_in.time.values) #+ pd.DateOffset(months=lag)
 
+        # use boolean idx_in to pull out times (months) where idx is pos or neg
+        months = pd.PeriodIndex(idx_in.time.where(idx_in,drop=True).values.astype('datetime64[M]'),freq='M')
+
+        # store
+        self.months = months
+
+        # format data variables and assign month (rathe than specific time)
         ds_months = pd.PeriodIndex(pd.to_datetime(spira.time.values),freq='M')
 
-        months = pd.PeriodIndex(idx_in.time.where(idx_in,drop=True).values.astype('datetime64[M]'),freq='M')
         spira['idx'] = xr.DataArray(data=ds_months.isin(months),coords={'time':spira.time})
 
         filtered_ds = spira.where(spira.idx,drop=True)
@@ -223,7 +250,7 @@ class Composite():
                               'salinity':np.concatenate([self.s_pos.values.flatten(),self.s_neg.values.flatten()]),
                               'pressure':-np.concatenate([p_pos,p_neg]),
                               'sigma0': np.concatenate([rho_pos,rho_neg]),
-                              'SLA': ['+ SLA' for _ in tm_pos] + ['- SLA' for _ in tm_neg],
+                              self.idx_name: ['+ {}'.format(self.idx_name) for _ in tm_pos] + ['- {}'.format(self.idx_name) for _ in tm_neg],
                               'month': get_month(np.concatenate([tm_pos,tm_neg])),
                               'year': pd.to_datetime(np.concatenate([tm_pos,tm_neg])).year,
                               #'Shelf': np.concatenate([self.ds_pos.shelf.values.flatten(),self.ds_neg.shelf.values.flatten()])
