@@ -221,6 +221,13 @@ class Composite():
         single(axs[2],axs[3],self.t_neg.time)
 
     def build_sns_data(self):
+        get_month = lambda time: time.astype('datetime64[M]').astype(int) % 12 + 1
+
+        self.sns_profiles = pd.DataFrame(data={'time':np.concatenate([self.t_pos.time,self.t_neg.time]),
+                                               self.idx_name:['+ {}'.format(self.idx_name) for _ in self.t_pos] + ['- {}'.format(self.idx_name) for _ in self.t_neg],
+                                               'month': get_month(np.concatenate([self.t_pos.time,self.t_neg.time])),
+                                               'year': pd.to_datetime(np.concatenate([self.t_pos.time,self.t_neg.time])).year,
+                                               })
         print('preparing data')
         tm_pos,p_pos = np.meshgrid(self.t_pos.time,self.t_pos.pressure)
         tm_neg,p_neg = np.meshgrid(self.t_neg.time,self.t_neg.pressure)
@@ -230,7 +237,6 @@ class Composite():
         tm_neg = tm_neg.flatten()
         rho_pos = gsw.density.sigma0(self.s_pos.values,self.t_pos.values).flatten()
         rho_neg = gsw.density.sigma0(self.s_neg.values,self.t_neg.values).flatten()
-        get_month = lambda time: time.astype('datetime64[M]').astype(int) % 12 + 1
 
         # def get_season(time):
         #     month=get_month(time)
