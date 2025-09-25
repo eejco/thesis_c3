@@ -1,0 +1,140 @@
+import pandas as pd
+import numpy as np
+import xarray as xr
+import matplotlib.pyplot as plt
+import cartopy.crs as ccrs
+import cmocean
+from cartopy.feature import LAND
+from gsw import geostrophy, density,conversions
+from stericheight.data_handler import GEBCO
+
+class Functions():
+    def __init__(self):
+        self.elevation_ = GEBCO(coarsen_factor=40).ds.elevation
+
+    #define helper functions
+    def get_trend(da: xr.DataArray,ns=True):
+        ns_2_yr = lambda x: x * 1e9 * 60 * 60 * 24 * 365.25
+        p = da.polyfit(dim='time',deg=1)
+        m = p.polyfit_coefficients.sel(degree=1)
+        m = m.assign_coords(longitude=da.longitude)
+        return ns_2_yr(m) if ns else m
+
+    def crop_to_extent(ds, extent):
+        return ds.where((ds.latitude >= extent[2]) & 
+                        (ds.latitude <= extent[3]) &
+                        (ds.longitude >= extent[0]) &
+                        (ds.longitude <= extent[1]), drop=True)
+
+    def season_split(self,da):
+        # divide by season
+        months = da.time.dt.month
+        seasons = dict()
+        seasons['winter'] = da.where((months >=7) & (months <=9))
+        seasons['spring'] = da.where((months >=10) & (months <=12))
+        seasons['summer'] = da.where((months >=1) & (months <=3))
+        seasons['autumn'] = da.where((months >=4) & (months <=6))
+        return seasons
+
+    def seasonal_anomaly(self,da):
+        return da.groupby('time.month') - da.groupby('time.month').mean()
+
+    def get_geostrophic_currents(self,eta):
+        lat_name = 'latitude'
+        lon_name = 'longitude'
+        g = 9.81
+        R = 6371000.0
+        omega = 7.292115e-5
+
+        # Ensure coords are present and in degrees
+        lat = eta.coords[lat_name]
+        lon = eta.coords[lon_name]
+
+        # radians
+        lat_r = np.deg2rad(lat)
+        lon_r = np.deg2rad(lon)
+
+        # Build helper to take gradients along given axes using the 1D radian coords
+        # Works for data with optional leading dims (e.g., time)
+        def d_dcoord(da: xr.DataArray, coord: xr.DataArray, axis: int) -> xr.DataArray:
+            arr = da.data
+            coord_vals = coord.data
+            grad = np.gradient(arr, coord_vals, axis=axis, edge_order=2)
+            return xr.zeros_like(da) + grad  # keep xarray wrapper/dims
+
+        # Axis indices for lat/lon (support datasets with extra leading dims)
+        lat_axis = eta.get_axis_num(lat_name)
+        lon_axis = eta.get_axis_num(lon_name)
+
+        # Partial derivatives wrt latitude/longitude in *radians*
+        deta_dphi   = d_dcoord(eta, lat_r, lat_axis)         # ∂η/∂φ
+        deta_dlambda= d_dcoord(eta, lon_r, lon_axis)         # ∂η/∂λ
+
+        # Coriolis parameter f(φ)
+        f = np.sin(lat_r) * omega * 2
+
+        # Broadcast f and cosφ to data shape
+        # (xarray auto-broadcasts by coords when wrapped in DataArray with dims)
+        f_da = xr.DataArray(f, dims=(lat_name,), coords={lat_name: lat})
+        cosphi = xr.DataArray(np.cos(lat_r), dims=(lat_name,), coords={lat_name: lat})
+
+        # Geostrophic components
+        ug = (1.0 / R) * deta_dphi * -(g / f_da) 
+        vg = (1.0 / (R * cosphi)) * deta_dlambda * (g / f_da)
+
+        ug.name = "ug"; ug.attrs.update(units="m s-1", long_name="zonal geostrophic velocity")
+        vg.name = "vg"; vg.attrs.update(units="m s-1", long_name="meridional geostrophic velocity")
+
+        return ug, vg
+
+    def plotc(self,ax,da,title,extent,vmin=None,vmax=None,cmap=cmocean.cm.balance,vector=None,rs=25):
+        da.plot.contourf(x='longitude',y='latitude',ax=ax,levels=40,transform=ccrs.PlateCarree(),cmap=cmap,vmin=vmin,vmax=vmax)
+        if vector is not None:
+            vector.plot.quiver(ax=ax,x='longitude',y='latitude',u='u10', v='v10',transform=ccrs.PlateCarree(),regrid_shape=rs)
+        
+        self.elevation_.plot.contour(x='longitude',y='latitude',ax=ax,levels=[-1000,-4000],transform=ccrs.PlateCarree(),cmap="copper_r",vmin=-10000,vmax=0,linewidths=1,linestyles='--')
+
+        ax.set_title(title)
+        ax.set_extent(extent,crs=ccrs.PlateCarree())
+        ax.add_feature(LAND, edgecolor='k')
+        ax.gridlines(draw_labels=True)
+
+    # find top & bottom 10% of sla and sic
+    def get_topbot(self,idx,frac=0.1):
+        sla_bq = idx.quantile(frac,dim='time')
+        sla_tq = idx.quantile(1-frac,dim='time')
+        botboo = idx <= sla_bq
+        topboo = idx >= sla_tq
+        top = lambda da, s=0: da.where(topboo.shift({'time':s},0),drop=True).mean('time')
+        bot = lambda da, s=0: da.where(botboo.shift({'time':s},0),drop=True).mean('time')
+        return topboo, botboo, top, bot
+
+    def run_for_idx(self,idx,frac,da,da_vector,da_title,extent):  
+        perc=int(frac*100)
+        topboo, botboo, top, bot = self.get_topbot(idx,frac)
+
+        fig = plt.figure(figsize=(12,10))
+        gs = fig.add_gridspec(4,2)
+
+        ax = fig.add_subplot(gs[0, :])
+
+        ax.plot(idx.time,idx,color='olive',label='SLA')
+        ax.plot(idx.time,np.zeros_like(idx),color='#373e02')
+
+        # highlight regions of positive and negative index
+        ax.fill_between(idx.time, 0,12, where=topboo, alpha=0.4, facecolor='darkkhaki',label='TOP/BOTTOM {}%'.format(perc))
+        ax.fill_between(idx.time,-12,0, where=botboo, alpha=0.4, facecolor='darkkhaki')
+
+        ax.set_ylim([-12,12])
+        ax.set_ylabel('gyre height')
+        ax.legend(loc='best')
+        ax.set_title('(a)',loc='left')
+        ax.grid()
+
+        ax = fig.add_subplot(gs[1:3,0],projection=ccrs.Mercator())
+        self.plotc(ax,top(da),'{} top {}%'.format(da_title,perc),extent,-6,9,vector=top(da_vector))
+        ax = fig.add_subplot(gs[1:3,1],projection=ccrs.Mercator())
+        self.plotc(ax,bot(da),'{} bottom {}%'.format(da_title,perc),extent,-6,9,vector=bot(da_vector))
+
+
+        plt.tight_layout()
