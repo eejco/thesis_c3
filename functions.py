@@ -101,13 +101,13 @@ class Functions():
 
     # find top & bottom 10% of sla and sic
     def get_topbot(self,idx,frac=0.1):
-        sla_bq = idx.quantile(frac,dim='time')
-        sla_tq = idx.quantile(1-frac,dim='time')
-        botboo = idx <= sla_bq
-        topboo = idx >= sla_tq
-        top = lambda da, s=0: da.where(topboo.shift({'time':s},0),drop=True).mean('time')
-        bot = lambda da, s=0: da.where(botboo.shift({'time':s},0),drop=True).mean('time')
-        return topboo, botboo, top, bot
+        idx_bq = idx.quantile(frac,dim='time')
+        idx_tq = idx.quantile(1-frac,dim='time')
+        botboo = idx <= idx_bq
+        topboo = idx >= idx_tq
+        topfun = lambda da, s=0: da.where(topboo.shift({'time':s},0),drop=True).mean('time')
+        botfun = lambda da, s=0: da.where(botboo.shift({'time':s},0),drop=True).mean('time')
+        return topboo, botboo, topfun, botfun
 
     def run_for_idx(self,idx,frac,da,da_vector,da_title,extent):  
         perc=int(frac*100)

@@ -10,25 +10,31 @@ import matplotlib.patches as mpatches
 import seaborn as sns
 from stericheight.plotting_fns import PlottingFns
 from load_meop import MEOP
+from functions import Functions
 
 
 class Composite():
-    def __init__(self,idx_data,idx_name,std_lim=0.5,lagwindow=0):
-        self.limit = idx_data.std() * std_lim
-        self.limit_label = str(std_lim) + r'$\sigma$'
+    def __init__(self,idx_data,idx_name,frac=0.1,lag=0):#std_lim=0.5,lagwindow=0):
 
-        self.idx_positive_without_lag = idx_data >= self.limit
-        self.idx_negative_without_lag = idx_data <= -self.limit
-
-        def get_lagwindow(arr: xr.DataArray,lagwindow: int):
-            arr_out = arr.copy()
-            for n in (np.arange(lagwindow) + 1):
-                shifted_arr = arr.shift({'time':n},0)
-                arr_out = arr_out | shifted_arr
-            return arr_out
+        self.fns = Functions()
         
-        self.idx_positive_with_lag = get_lagwindow(self.idx_positive_without_lag,lagwindow)
-        self.idx_negative_with_lag = get_lagwindow(self.idx_negative_without_lag,lagwindow)
+        topboo, botboo, topfun, botfun = self.fns.get_topbot(idx_data,frac)
+
+        #self.limit = idx_data.std() * std_lim
+        self.limit_label = ' ' + str(frac * 100) + '%' # str(std_lim) + r'$\sigma$'
+
+        self.idx_positive_without_lag = topboo #idx_data >= self.limit
+        self.idx_negative_without_lag = botboo #idx_data <= -self.limit
+
+        # def get_lagwindow(arr: xr.DataArray,lagwindow: int):
+        #     arr_out = arr.copy()
+        #     for n in (np.arange(lagwindow) + 1):
+        #         shifted_arr = arr.shift({'time':n},0)
+        #         arr_out = arr_out | shifted_arr
+        #     return arr_out
+        
+        self.idx_positive_with_lag = topboo.shift({'time':lag},0) #get_lagwindow(self.idx_positive_without_lag,lagwindow)
+        self.idx_negative_with_lag = botboo.shift({'time':lag},0) #get_lagwindow(self.idx_negative_without_lag,lagwindow)
 
         self.idx_name=idx_name
         self.idx_data=idx_data
@@ -82,8 +88,14 @@ class Composite():
         ax.plot(self.idx_data.time,np.zeros_like(self.idx_data),color='#373e02')
 
         # highlight regions of positive and negative index
-        ax.fill_between(self.idx_data.time, 0,ylim[1], where=self.idx_positive_without_lag, alpha=0.4, facecolor='darkkhaki',label='+/- '+ self.limit_label)
-        ax.fill_between(self.idx_data.time,ylim[0],0, where=self.idx_negative_without_lag, alpha=0.4, facecolor='darkkhaki')
+        # need to extend an extra month to capture full month
+        def plus1(arr):
+            arrin = arr.copy()
+            shifted_arr = arr.shift({'time':1},0)
+            return arrin | shifted_arr
+
+        ax.fill_between(self.idx_data.time, 0,ylim[1], where=plus1(self.idx_positive_without_lag), alpha=0.4, facecolor='darkkhaki',label='+/- '+ self.limit_label)
+        ax.fill_between(self.idx_data.time,ylim[0],0, where=plus1(self.idx_negative_without_lag), alpha=0.4, facecolor='darkkhaki')
         
         # highlight regions of lagwindow
         lagwindow_postive = self.idx_positive_with_lag & (~self.idx_positive_without_lag)
