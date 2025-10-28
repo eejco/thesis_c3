@@ -13,11 +13,12 @@ class Functions():
         self.elevation_ = GEBCO(coarsen_factor=40).ds.elevation
 
     #define helper functions
-    def get_trend(da: xr.DataArray,ns=True):
+    def get_trend(self,da: xr.DataArray,ns=True):
         ns_2_yr = lambda x: x * 1e9 * 60 * 60 * 24 * 365.25
         p = da.polyfit(dim='time',deg=1)
         m = p.polyfit_coefficients.sel(degree=1)
-        m = m.assign_coords(longitude=da.longitude)
+        if 'longitude' in da.dims:
+            m = m.assign_coords(longitude=da.longitude)
         return ns_2_yr(m) if ns else m
 
     def crop_to_extent(ds, extent):
@@ -109,7 +110,7 @@ class Functions():
         botfun = lambda da, s=0: da.where(botboo.shift({'time':s},0),drop=True).mean('time')
         return topboo, botboo, topfun, botfun
 
-    def run_for_idx(self,idx,frac,da,da_vector,da_title,extent):  
+    def run_for_idx(self,idx,frac,da,da_vector,da_title,extent,lag=0,ylim=12):  
         perc=int(frac*100)
         topboo, botboo, top, bot = self.get_topbot(idx,frac)
 
@@ -122,10 +123,22 @@ class Functions():
         ax.plot(idx.time,np.zeros_like(idx),color='#373e02')
 
         # highlight regions of positive and negative index
-        ax.fill_between(idx.time, 0,12, where=topboo, alpha=0.4, facecolor='darkkhaki',label='TOP/BOTTOM {}%'.format(perc))
-        ax.fill_between(idx.time,-12,0, where=botboo, alpha=0.4, facecolor='darkkhaki')
+        # need to extend an extra month to capture full month
+        def plus1(arr):
+            arrin = arr.copy()
+            shifted_arr = arr.shift({'time':1},0)
+            return arrin | shifted_arr
 
-        ax.set_ylim([-12,12])
+        # highlight regions of positive and negative index
+        ax.fill_between(idx.time, 0,ylim, where=plus1(topboo), alpha=0.4, facecolor='darkkhaki',label='TOP/BOTTOM {}%'.format(perc))
+        ax.fill_between(idx.time,-ylim,0, where=plus1(botboo), alpha=0.4, facecolor='darkkhaki')
+
+        # highlight lag regions
+        if lag > 0:
+            ax.fill_between(idx.time, 0,ylim, where=plus1(topboo).shift({'time':lag}), alpha=0.4, facecolor='coral',label='+ {}-month lag'.format(lag))
+            ax.fill_between(idx.time,-ylim,0, where=plus1(botboo).shift({'time':lag}), alpha=0.4, facecolor='coral')
+
+        ax.set_ylim([-ylim,ylim])
         ax.set_ylabel('gyre height')
         ax.legend(loc='best')
         ax.set_title('(a)',loc='left')
