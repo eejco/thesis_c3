@@ -9,8 +9,8 @@ from gsw import geostrophy, density,conversions
 from stericheight.data_handler import GEBCO
 
 class Functions():
-    def __init__(self):
-        self.elevation_ = GEBCO(coarsen_factor=40).ds.elevation
+    def __init__(self,elevation_cf=40):
+        self.elevation_ = GEBCO(coarsen_factor=elevation_cf).ds.elevation
 
     #define helper functions
     def get_trend(self,da: xr.DataArray,ns=True):
@@ -110,12 +110,19 @@ class Functions():
         botfun = lambda da, s=0: da.where(botboo.shift({'time':s},0),drop=True).mean('time')
         return topboo, botboo, topfun, botfun
 
-    def run_for_idx(self,idx,frac,da,da_vector,da_title,extent,lag=0,ylim=12):  
+    def run_for_idx(self,idx,frac,da,da_vector,da_title,extent,lag=0,ylim=12,da2=None,da_vector2=None,da_title2=None,ylim2=1):  
         perc=int(frac*100)
         topboo, botboo, top, bot = self.get_topbot(idx,frac)
 
-        fig = plt.figure(figsize=(12,10))
-        gs = fig.add_gridspec(4,2)
+        if da2 is not None:
+            fs = 11
+            gs = 7
+        else:
+            fs = 10
+            gs = 4
+
+        fig = plt.figure(figsize=(12,fs))
+        gs = fig.add_gridspec(gs,2)
 
         ax = fig.add_subplot(gs[0, :])
 
@@ -144,10 +151,15 @@ class Functions():
         ax.set_title('(a)',loc='left')
         ax.grid()
 
-        ax = fig.add_subplot(gs[1:3,0],projection=ccrs.Mercator())
+        ax = fig.add_subplot(gs[1:4,0],projection=ccrs.Mercator())
         self.plotc(ax,top(da),'{} top {}%'.format(da_title,perc),extent,-6,9,vector=top(da_vector))
-        ax = fig.add_subplot(gs[1:3,1],projection=ccrs.Mercator())
+        ax = fig.add_subplot(gs[1:4,1],projection=ccrs.Mercator())
         self.plotc(ax,bot(da),'{} bottom {}%'.format(da_title,perc),extent,-6,9,vector=bot(da_vector))
 
+        if da2 is not None:
+            ax = fig.add_subplot(gs[4:7,0],projection=ccrs.Mercator())
+            self.plotc(ax,top(da2),'{} top {}%'.format(da_title2,perc),extent,-ylim2,ylim2,vector=top(da_vector2))
+            ax = fig.add_subplot(gs[4:7,1],projection=ccrs.Mercator())
+            self.plotc(ax,bot(da2),'{} bottom {}%'.format(da_title2,perc),extent,-ylim2,ylim2,vector=bot(da_vector2))
 
         plt.tight_layout()
