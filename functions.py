@@ -118,7 +118,7 @@ class Functions():
             fs = 11
             gs = 7
         else:
-            fs = 10
+            fs = 7
             gs = 4
 
         fig = plt.figure(figsize=(12,fs))
