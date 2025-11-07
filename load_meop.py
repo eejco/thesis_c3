@@ -436,7 +436,7 @@ class MEOP():
                     .swap_dims({'N_LEVELS':'pressure'}) \
                     .dropna(dim='pressure',how='all') \
                     .interp(coords={'pressure':pressure_axis}) \
-                    .assign_coords({'time':time}) \
+                    .assign_coords({'time':time,'latitude':latitude}) \
                     .expand_dims('time')
         if df is None:
             df = self.df
