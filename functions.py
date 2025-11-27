@@ -110,7 +110,7 @@ class Functions():
         botfun = lambda da, s=0: da.where(botboo.shift({'time':s},0),drop=True).mean('time')
         return topboo, botboo, topfun, botfun
 
-    def run_for_idx(self,idx,frac,da,da_vector,da_title,extent,lag=0,ylim=12,da2=None,da_vector2=None,da_title2=None,ylim2=1):  
+    def run_for_idx(self,idx,frac,da,da_vector,da_title,extent,lag=0,ylim_idx=12,da2=None,da_vector2=None,da_title2=None,ylim2=1,ylim1=1):  
         perc=int(frac*100)
         topboo, botboo, top, bot = self.get_topbot(idx,frac)
 
@@ -137,24 +137,24 @@ class Functions():
             return arrin | shifted_arr
 
         # highlight regions of positive and negative index
-        ax.fill_between(idx.time, 0,ylim, where=plus1(topboo), alpha=0.4, facecolor='darkkhaki',label='TOP/BOTTOM {}%'.format(perc))
-        ax.fill_between(idx.time,-ylim,0, where=plus1(botboo), alpha=0.4, facecolor='darkkhaki')
+        ax.fill_between(idx.time, 0,ylim_idx, where=plus1(topboo), alpha=0.4, facecolor='darkkhaki',label='TOP/BOTTOM {}%'.format(perc))
+        ax.fill_between(idx.time,-ylim_idx,0, where=plus1(botboo), alpha=0.4, facecolor='darkkhaki')
 
         # highlight lag regions
         if lag > 0:
-            ax.fill_between(idx.time, 0,ylim, where=plus1(topboo).shift({'time':lag}), alpha=0.4, facecolor='coral',label='+ {}-month lag'.format(lag))
-            ax.fill_between(idx.time,-ylim,0, where=plus1(botboo).shift({'time':lag}), alpha=0.4, facecolor='coral')
+            ax.fill_between(idx.time, 0,ylim_idx, where=plus1(topboo).shift({'time':lag}), alpha=0.4, facecolor='coral',label='+ {}-month lag'.format(lag))
+            ax.fill_between(idx.time,-ylim_idx,0, where=plus1(botboo).shift({'time':lag}), alpha=0.4, facecolor='coral')
 
-        ax.set_ylim([-ylim,ylim])
+        ax.set_ylim([-ylim_idx,ylim_idx])
         ax.set_ylabel('gyre height')
         ax.legend(loc='best')
         ax.set_title('(a)',loc='left')
         ax.grid()
 
         ax = fig.add_subplot(gs[1:4,0],projection=ccrs.Mercator())
-        self.plotc(ax,top(da),'{} top {}%'.format(da_title,perc),extent,-6,9,vector=top(da_vector))
+        self.plotc(ax,top(da),'{} top {}%'.format(da_title,perc),extent,-ylim1,ylim1,vector=top(da_vector))
         ax = fig.add_subplot(gs[1:4,1],projection=ccrs.Mercator())
-        self.plotc(ax,bot(da),'{} bottom {}%'.format(da_title,perc),extent,-6,9,vector=bot(da_vector))
+        self.plotc(ax,bot(da),'{} bottom {}%'.format(da_title,perc),extent,-ylim1,ylim1,vector=bot(da_vector))
 
         if da2 is not None:
             ax = fig.add_subplot(gs[4:7,0],projection=ccrs.Mercator())
