@@ -27,9 +27,9 @@ class Functions():
                         (ds.longitude >= extent[0]) &
                         (ds.longitude <= extent[1]), drop=True)
 
-    def season_split(self,da):
+    def season_split(self,da,tlabel='time'):
         # divide by season
-        months = da.time.dt.month
+        months = da[tlabel].dt.month
         seasons = dict()
         seasons['winter'] = da.where((months >=7) & (months <=9))
         seasons['spring'] = da.where((months >=10) & (months <=12))
@@ -37,12 +37,11 @@ class Functions():
         seasons['autumn'] = da.where((months >=4) & (months <=6))
         return seasons
 
-    def seasonal_anomaly(self,da):
-        return da.groupby('time.month') - da.groupby('time.month').mean()
+    def seasonal_anomaly(self,da,tlabel='time'):
+        return da.groupby(tlabel+'.month') - da.groupby(tlabel+'.month').mean()
 
-    def get_geostrophic_currents(self,eta):
-        lat_name = 'latitude'
-        lon_name = 'longitude'
+    def get_geostrophic_currents(self,eta,lat_name='latitude',lon_name='longitude'):
+
         g = 9.81
         R = 6371000.0
         omega = 7.292115e-5
@@ -88,10 +87,10 @@ class Functions():
 
         return ug, vg
 
-    def plotc(self,ax,da,title,extent,vmin=None,vmax=None,cmap=cmocean.cm.balance,vector=None,rs=25):
-        da.plot.contourf(x='longitude',y='latitude',ax=ax,levels=40,transform=ccrs.PlateCarree(),cmap=cmap,vmin=vmin,vmax=vmax)
+    def plotc(self,ax,da,title,extent,vmin=None,vmax=None,cmap=cmocean.cm.balance,vector=None,rs=25,lat_name='latitude',lon_name='longitude'):
+        da.plot.contourf(x=lon_name,y=lat_name,ax=ax,levels=40,transform=ccrs.PlateCarree(),cmap=cmap,vmin=vmin,vmax=vmax)
         if vector is not None:
-            vector.plot.quiver(ax=ax,x='longitude',y='latitude',u='u10', v='v10',transform=ccrs.PlateCarree(),regrid_shape=rs)
+            vector.plot.quiver(ax=ax,x=lon_name,y=lat_name,u='u10', v='v10',transform=ccrs.PlateCarree(),regrid_shape=rs)
         
         self.elevation_.plot.contour(x='longitude',y='latitude',ax=ax,levels=[-1000,-4000],transform=ccrs.PlateCarree(),cmap="copper_r",vmin=-10000,vmax=0,linewidths=1,linestyles='--')
 
@@ -109,8 +108,40 @@ class Functions():
         topfun = lambda da, s=0: da.where(topboo.shift({'time':s},0),drop=True).mean('time')
         botfun = lambda da, s=0: da.where(botboo.shift({'time':s},0),drop=True).mean('time')
         return topboo, botboo, topfun, botfun
+    
+    def idx_ts(self,idx,frac,lag=0,ylim_idx=12):  
+        perc=int(frac*100)
+        topboo, botboo, top, bot = self.get_topbot(idx,frac)
 
-    def run_for_idx(self,idx,frac,da,da_vector,da_title,extent,lag=0,ylim_idx=12,da2=None,da_vector2=None,da_title2=None,ylim2=1,ylim1=1):  
+        fig,ax = plt.subplots(figsize=(14,3))
+
+        ax.plot(idx.time,idx,color='olive',label='SLA')
+        ax.plot(idx.time,np.zeros_like(idx),color='#373e02')
+
+        # highlight regions of positive and negative index
+        # need to extend an extra month to capture full month
+        def plus1(arr):
+            arrin = arr.copy()
+            shifted_arr = arr.shift({'time':1},0)
+            return arrin | shifted_arr
+
+        # highlight regions of positive and negative index
+        ax.fill_between(idx.time, 0,ylim_idx, where=plus1(topboo), alpha=0.4, facecolor='darkkhaki',label='TOP/BOTTOM {}%'.format(perc))
+        ax.fill_between(idx.time,-ylim_idx,0, where=plus1(botboo), alpha=0.4, facecolor='darkkhaki')
+
+        # highlight lag regions
+        if lag > 0:
+            ax.fill_between(idx.time, 0,ylim_idx, where=plus1(topboo).shift({'time':lag}), alpha=0.4, facecolor='coral',label='+ {}-month lag'.format(lag))
+            ax.fill_between(idx.time,-ylim_idx,0, where=plus1(botboo).shift({'time':lag}), alpha=0.4, facecolor='coral')
+        
+        ax.set_ylim([-ylim_idx,ylim_idx])
+        ax.set_ylabel('gyre height')
+        ax.legend(loc='best')
+        ax.set_title('(a)',loc='left')
+        ax.grid()
+
+
+    def run_for_idx(self,idx,frac,da,da_vector,da_title,extent,lag=0,ylim_idx=12,da2=None,da_vector2=None,da_title2=None,ylim2=1,ylim1=1,lat_name='latitude',lon_name='longitude'):  
         perc=int(frac*100)
         topboo, botboo, top, bot = self.get_topbot(idx,frac)
 
@@ -152,9 +183,9 @@ class Functions():
         ax.grid()
 
         ax = fig.add_subplot(gs[1:4,0],projection=ccrs.Mercator())
-        self.plotc(ax,top(da),'{} top {}%'.format(da_title,perc),extent,-ylim1,ylim1,vector=top(da_vector))
+        self.plotc(ax,top(da),'{} top {}%'.format(da_title,perc),extent,-ylim1,ylim1,vector=top(da_vector),lat_name=lat_name,lon_name=lon_name)
         ax = fig.add_subplot(gs[1:4,1],projection=ccrs.Mercator())
-        self.plotc(ax,bot(da),'{} bottom {}%'.format(da_title,perc),extent,-ylim1,ylim1,vector=bot(da_vector))
+        self.plotc(ax,bot(da),'{} bottom {}%'.format(da_title,perc),extent,-ylim1,ylim1,vector=bot(da_vector),lat_name=lat_name,lon_name=lon_name)
 
         if da2 is not None:
             ax = fig.add_subplot(gs[4:7,0],projection=ccrs.Mercator())
