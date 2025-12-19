@@ -12,7 +12,7 @@ from gsw import density
 from stericheight.plotting_fns import PlottingFns
 pfns = PlottingFns()
 
-ROOT = '/nfs/b0133/eejco/data/MEOP_2024/media/disk2/roquet/MEOP_public/MEOP-CTD_2024-03-08/'
+ROOT = '../data/MEOP_2024/media/disk2/roquet/MEOP_public/MEOP-CTD_2024-03-08/'
 FNAME_PROFILES = ROOT + 'list_profiles.csv'
 FNAME_TAGS = ROOT + 'list_tags.csv'
 FNAME_DEPLOYMENTS = ROOT + 'list_deployments.csv'

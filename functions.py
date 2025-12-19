@@ -194,3 +194,25 @@ class Functions():
             self.plotc(ax,bot(da2),'{} bottom {}%'.format(da_title2,perc),extent,-ylim2,ylim2,vector=bot(da_vector2))
 
         plt.tight_layout()
+
+    def get_asc(da,cropped_elevation,uname='u10',vname='v10',latmin=-66.4,latmax=-65):
+        # get -1000 isobath usxing contour
+        cc=cropped_elevation.sel(latitude=slice(latmin,latmax)).plot.contour(levels=[-1000])
+        lats = xr.DataArray(cc.allsegs[0][0].T[1],coords={'longitude':cc.allsegs[0][0].T[0]})
+
+        #interpolate to data
+        asclats = lats.sortby('longitude').interp(longitude=da.longitude,kwargs={'fill_value':'extrapolate'})
+
+        # isolate asc on slope = -1000
+        da['asc_latitude'] = xr.DataArray(asclats,coords={'longitude':da.longitude})
+        da['asc'] = da[uname].sel(latitude=da.asc_latitude,method='nearest')
+
+        # convert to m
+        R = 6371000
+        lat_radians = np.deg2rad(da.asc_latitude)
+
+        dx = R * np.cos(lat_radians[:-1]) * np.deg2rad(np.diff(da.longitude))
+        dy = R * np.deg2rad(np.diff(da.asc_latitude))
+
+        delta = np.stack([dx,dy],axis=1)
+        t_hat = delta / np.linalg.norm(delta, axis=1)[:, None]
