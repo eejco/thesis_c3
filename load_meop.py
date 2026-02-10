@@ -53,6 +53,19 @@ class MEOP():
         )
     
     def load_profiles_for_spira(self,pressure_axis=np.arange(0,1002,2)):
+        def calc_gpha(t,s,p,maxz=300):
+            #try:
+            crop = lambda da: da[p<maxz]
+            rho = density.rho(crop(s),crop(t),crop(p))
+            rho_ref = density.rho(35,0,crop(p))
+
+            vs = (1/rho - 1/rho_ref)/9.82
+            pres_pa = crop(p) * 10000
+
+            #vs = vs.assign_coords({'PRES_PA':pres_pa})
+            return np.trapz(vs,pres_pa) #vs.integrate('PRES_PA').item()
+            # except:
+            #     return np.nan
          # define methods to retrieve info one each profile
         deployment = lambda platform: str.split(platform,'-')[0]
         country = lambda platform: str(self.deployments[self.deployments.DEPLOYMENT_CODE == deployment(platform)].COUNTRY.item())
@@ -71,6 +84,7 @@ class MEOP():
             'temp': {'dims':['time','pres'],'data':[]},
             'psal': {'dims':['time','pres'],'data':[]},
             'dsource': {'dims':'time','data':[]},
+            'gph': {'dims':['time'],'data':[]}
         }
         for pc in tqdm(self.profile_codes):
             fname = folder(pc)+filename(pc)
@@ -110,6 +124,7 @@ class MEOP():
                             data_vars['dsource']['data'].append('MEOP-')
                             data_vars['temp']['data'].append(t)
                             data_vars['psal']['data'].append(s)
+                            data_vars['gph']['data'].append(calc_gpha(t,s,pressure_axis))
 
         self.ds = xr.Dataset.from_dict({
             'dims':['time','pres'],
@@ -166,18 +181,19 @@ class MEOP():
 
                         if not (np.all(np.isnan(t)) or np.all(np.isnan(s))):
                             coords = {'pressure': p}
-
+                            tempp = [xr.DataArray(t, coords=coords)] if not depth_average else t[p < max(pressure_axis)].mean()
+                            psall = [xr.DataArray(s, coords=coords)] if not depth_average else s[p < max(pressure_axis)].mean()
                             vars = {'platform':pc,
                                     'latitude':ds_.LATITUDE.item(),
                                     'longitude':ds_.LONGITUDE.item(),
                                     'time':np.datetime64(ds_.JULD.item().strftime('%Y-%m-%dT%H:%M:%S')),
                                     'filename':fname,
-                                    'temperature':[xr.DataArray(t, coords=coords)] if not depth_average else t[p < max(pressure_axis)].mean(),
-                                    'salinity':[xr.DataArray(s, coords=coords)] if not depth_average else s[p < max(pressure_axis)].mean(),
+                                    'temperature': tempp,
+                                    'salinity': psall,
                                     # 'pressure_qc':[xr.DataArray(p_qc,coords=coords)],
                                     # 'temperature_qc':[xr.DataArray(t_qc,coords=coords)],
                                     # 'salinity_qc':[xr.DataArray(s_qc,coords=coords)],
-                                    # 'gph':calc_gpha(t,s,p,MAXZ),
+                                    'gph':calc_gpha(t,s,p,MAXZ),
                                     'nlevels':len(p)
                             }
                             profiles.append(vars)

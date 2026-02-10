@@ -97,7 +97,13 @@ class Functions():
         ax.set_title(title)
         ax.set_extent(extent,crs=ccrs.PlateCarree())
         ax.add_feature(LAND, edgecolor='k')
-        ax.gridlines(draw_labels=True)
+        gl = ax.gridlines(draw_labels=True)
+
+        gl.top_labels = False
+        gl.right_labels = False
+        gl.bottom_labels = True
+        gl.left_labels = True
+
 
     # find top & bottom 10% of sla and sic
     def get_topbot(self,idx,frac=0.1):
@@ -182,15 +188,15 @@ class Functions():
         ax.set_title('(a)',loc='left')
         ax.grid()
 
-        ax = fig.add_subplot(gs[1:4,0],projection=ccrs.Mercator())
+        ax = fig.add_subplot(gs[1:4,0],projection=ccrs.TransverseMercator(central_longitude=145))
         self.plotc(ax,top(da),'{} top {}%'.format(da_title,perc),extent,-ylim1,ylim1,vector=top(da_vector),lat_name=lat_name,lon_name=lon_name)
-        ax = fig.add_subplot(gs[1:4,1],projection=ccrs.Mercator())
+        ax = fig.add_subplot(gs[1:4,1],projection=ccrs.TransverseMercator(central_longitude=145))
         self.plotc(ax,bot(da),'{} bottom {}%'.format(da_title,perc),extent,-ylim1,ylim1,vector=bot(da_vector),lat_name=lat_name,lon_name=lon_name)
 
         if da2 is not None:
-            ax = fig.add_subplot(gs[4:7,0],projection=ccrs.Mercator())
+            ax = fig.add_subplot(gs[4:7,0],projection=ccrs.TransverseMercator(central_longitude=145))
             self.plotc(ax,top(da2),'{} top {}%'.format(da_title2,perc),extent,-ylim2,ylim2,vector=top(da_vector2))
-            ax = fig.add_subplot(gs[4:7,1],projection=ccrs.Mercator())
+            ax = fig.add_subplot(gs[4:7,1],projection=ccrs.TransverseMercator(central_longitude=145))
             self.plotc(ax,bot(da2),'{} bottom {}%'.format(da_title2,perc),extent,-ylim2,ylim2,vector=bot(da_vector2))
 
         plt.tight_layout()
