@@ -21,7 +21,7 @@ class Functions():
             m = m.assign_coords(longitude=da.longitude)
         return ns_2_yr(m) if ns else m
 
-    def crop_to_extent(ds, extent):
+    def crop_to_extent(self,ds, extent):
         return ds.where((ds.latitude >= extent[2]) & 
                         (ds.latitude <= extent[3]) &
                         (ds.longitude >= extent[0]) &
