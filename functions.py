@@ -87,8 +87,8 @@ class Functions():
 
         return ug, vg
 
-    def plotc(self,ax,da,title,extent,vmin=None,vmax=None,cmap=cmocean.cm.balance,vector=None,rs=25,lat_name='latitude',lon_name='longitude'):
-        da.plot.contourf(x=lon_name,y=lat_name,ax=ax,levels=40,transform=ccrs.PlateCarree(),cmap=cmap,vmin=vmin,vmax=vmax)
+    def plotc(self,ax,da,title,extent,vmin=None,vmax=None,cmap=cmocean.cm.balance,vector=None,rs=25,lat_name='latitude',lon_name='longitude',ac=True):
+        im=da.plot.contourf(x=lon_name,y=lat_name,ax=ax,levels=40,transform=ccrs.PlateCarree(),vmin=vmin,vmax=vmax,add_colorbar=ac,cmap=cmap)
         if vector is not None:
             vector.plot.quiver(ax=ax,x=lon_name,y=lat_name,u='u10', v='v10',transform=ccrs.PlateCarree(),regrid_shape=rs)
         
@@ -103,6 +103,7 @@ class Functions():
         gl.right_labels = False
         gl.bottom_labels = True
         gl.left_labels = True
+        return im
 
 
     # find top & bottom 10% of sla and sic
@@ -183,21 +184,21 @@ class Functions():
             ax.fill_between(idx.time,-ylim_idx,0, where=plus1(botboo).shift({'time':lag}), alpha=0.4, facecolor='coral')
 
         ax.set_ylim([-ylim_idx,ylim_idx])
-        ax.set_ylabel('gyre height')
+        ax.set_ylabel('Gyre Index')
         ax.legend(loc='best')
         ax.set_title('(a)',loc='left')
         ax.grid()
 
         ax = fig.add_subplot(gs[1:4,0],projection=ccrs.TransverseMercator(central_longitude=145))
-        self.plotc(ax,top(da),'{} top {}%'.format(da_title,perc),extent,-ylim1,ylim1,vector=top(da_vector),lat_name=lat_name,lon_name=lon_name)
+        self.plotc(ax,top(da),'{} top {}%'.format(da_title,perc),extent,-ylim1,ylim1,vector=top(da_vector),lat_name=lat_name,lon_name=lon_name,ac=False)
         ax = fig.add_subplot(gs[1:4,1],projection=ccrs.TransverseMercator(central_longitude=145))
-        self.plotc(ax,bot(da),'{} bottom {}%'.format(da_title,perc),extent,-ylim1,ylim1,vector=bot(da_vector),lat_name=lat_name,lon_name=lon_name)
+        self.plotc(ax,bot(da),'{} bottom {}%'.format(da_title,perc),extent,-ylim1,ylim1,vector=bot(da_vector),lat_name=lat_name,lon_name=lon_name,ac=False)
 
         if da2 is not None:
             ax = fig.add_subplot(gs[4:7,0],projection=ccrs.TransverseMercator(central_longitude=145))
-            self.plotc(ax,top(da2),'{} top {}%'.format(da_title2,perc),extent,-ylim2,ylim2,vector=top(da_vector2))
+            self.plotc(ax,top(da2),'{} top {}%'.format(da_title2,perc),extent,-ylim2,ylim2,vector=top(da_vector2),ac=False)
             ax = fig.add_subplot(gs[4:7,1],projection=ccrs.TransverseMercator(central_longitude=145))
-            self.plotc(ax,bot(da2),'{} bottom {}%'.format(da_title2,perc),extent,-ylim2,ylim2,vector=bot(da_vector2))
+            self.plotc(ax,bot(da2),'{} bottom {}%'.format(da_title2,perc),extent,-ylim2,ylim2,vector=bot(da_vector2),ac=False)
 
         plt.tight_layout()
 
