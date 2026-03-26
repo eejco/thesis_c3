@@ -223,3 +223,25 @@ class Functions():
 
         delta = np.stack([dx,dy],axis=1)
         t_hat = delta / np.linalg.norm(delta, axis=1)[:, None]
+
+    def sanom(self, da):
+        return da.groupby('time.month') - da.groupby('time.month').mean()
+    
+    def sig0range(self,tlims,slims):
+        sig0_n = 100
+        temprange = np.linspace(tlims[0],tlims[1],sig0_n)
+        psalrange = np.linspace(slims[0],slims[1],sig0_n)
+
+        sig0range = np.zeros((sig0_n,sig0_n))
+        for i,t in enumerate(temprange):
+            for j,s in enumerate(psalrange):
+                sig0range[i,j]=density.sigma0(conversions.SA_from_SP(s,0,145,-67),conversions.CT_from_t(s,t,0))
+        return temprange,psalrange,sig0range
+
+    def get_seasons(self,ds):
+        seasons={}
+        seasons['autumn']=ds.where(((ds.month >= 4) & (ds.month <= 6)),drop=True)
+        seasons['winter']=ds.where(((ds.month >= 7) & (ds.month <= 9)),drop=True)
+        seasons['spring']=ds.where(((ds.month >= 10) & (ds.month <= 12)),drop=True)
+        seasons['summer']=ds.where(((ds.month >= 1) & (ds.month <= 3)),drop=True)
+        return seasons

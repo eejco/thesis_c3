@@ -63,7 +63,7 @@ class MEOP():
             pres_pa = crop(p) * 10000
 
             #vs = vs.assign_coords({'PRES_PA':pres_pa})
-            return np.trapz(vs,pres_pa) #vs.integrate('PRES_PA').item()
+            return np.trapezoid(vs,pres_pa) #vs.integrate('PRES_PA').item()
             # except:
             #     return np.nan
          # define methods to retrieve info one each profile
@@ -88,6 +88,7 @@ class MEOP():
         }
         for pc in tqdm(self.profile_codes):
             fname = folder(pc)+filename(pc)
+            self.store_fname = fname
             ds = xr.open_dataset(fname)
 
             in_area = self.is_in(ds,self.extent)
