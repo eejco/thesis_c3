@@ -52,7 +52,7 @@ class MEOP():
                 (profile.LONGITUDE >= extent[0])
         )
     
-    def load_profiles_for_spira(self,pressure_axis=np.arange(0,1002,2)):
+    def load_profiles_for_spira(self,pressure_axis=np.arange(0,1002,2),gph=False):
         def calc_gpha(t,s,p,maxz=300):
             #try:
             crop = lambda da: da[p<maxz]
@@ -83,9 +83,13 @@ class MEOP():
             'profile_code': {'dims':'time','data':[]},
             'temp': {'dims':['time','pres'],'data':[]},
             'psal': {'dims':['time','pres'],'data':[]},
-            'dsource': {'dims':'time','data':[]},
-            'gph': {'dims':['time'],'data':[]}
+            'dsource': {'dims':'time','data':[]}
         }
+        if gph:
+            data_vars.update({
+            'gph': {'dims':['time'],'data':[]}
+            })
+        
         for pc in tqdm(self.profile_codes):
             fname = folder(pc)+filename(pc)
             self.store_fname = fname
@@ -125,7 +129,9 @@ class MEOP():
                             data_vars['dsource']['data'].append('MEOP-')
                             data_vars['temp']['data'].append(t)
                             data_vars['psal']['data'].append(s)
-                            data_vars['gph']['data'].append(calc_gpha(t,s,pressure_axis))
+
+                            if gph:
+                                data_vars['gph']['data'].append(calc_gpha(t,s,pressure_axis))
 
         self.ds = xr.Dataset.from_dict({
             'dims':['time','pres'],

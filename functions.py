@@ -22,10 +22,16 @@ class Functions():
         return ns_2_yr(m) if ns else m
 
     def crop_to_extent(self,ds, extent):
-        return ds.where((ds.latitude >= extent[2]) & 
-                        (ds.latitude <= extent[3]) &
-                        (ds.longitude >= extent[0]) &
-                        (ds.longitude <= extent[1]), drop=True)
+        if 'lat' in ds.coords:
+            lat = 'lat'
+            lon = 'lon'
+        else:
+            lat = 'latitude'
+            lon = 'longitude'
+        return ds.where((ds[lat] >= extent[2]) & 
+                        (ds[lat] <= extent[3]) &
+                        (ds[lon] >= extent[0]) &
+                        (ds[lon] <= extent[1]), drop=True)
 
     def season_split(self,da,tlabel='time'):
         # divide by season
@@ -245,3 +251,7 @@ class Functions():
         seasons['spring']=ds.where(((ds.month >= 10) & (ds.month <= 12)),drop=True)
         seasons['summer']=ds.where(((ds.month >= 1) & (ds.month <= 3)),drop=True)
         return seasons
+    
+    def integrate_na(self,da: xr.DataArray):
+        da = da.where(~np.isnan(da),drop=True)
+        return da.integrate('PRES_Pa') * 100
