@@ -9,7 +9,7 @@ import xesmf as xe
 import matplotlib.patches as mpatches
 import seaborn as sns
 from stericheight.plotting_fns import PlottingFns
-from load_meop import MEOP
+from stericheight.load_meop import MEOP
 from functions import Functions
 
 
