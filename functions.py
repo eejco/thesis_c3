@@ -32,6 +32,18 @@ class Functions():
                         (ds[lat] <= extent[3]) &
                         (ds[lon] >= extent[0]) &
                         (ds[lon] <= extent[1]), drop=True)
+    
+    def get_season(self,month: int):
+        if month < 4:
+            return 'summer'
+        elif month < 7:
+            return 'autumn'
+        elif month < 10:
+            return 'winter'
+        elif month <13:
+            return 'spring'
+        else:
+            ValueError('month {} invalid'.format(month))
 
     def season_split(self,da,tlabel='time'):
         # divide by season
