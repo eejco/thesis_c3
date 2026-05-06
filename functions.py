@@ -264,6 +264,6 @@ class Functions():
         seasons['summer']=ds.where(((ds.month >= 1) & (ds.month <= 3)),drop=True)
         return seasons
     
-    def integrate_na(self,da: xr.DataArray):
+    def integrate_na(self,da: xr.DataArray,dim='pres'):
         da = da.where(~np.isnan(da),drop=True)
-        return da.integrate('PRES_Pa') * 100
+        return da.integrate(dim)
