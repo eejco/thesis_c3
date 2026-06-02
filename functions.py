@@ -45,9 +45,12 @@ class Functions():
         else:
             ValueError('month {} invalid'.format(month))
 
-    def season_split(self,da,tlabel='time'):
+    def season_split(self,da,tlabel='time',has_month=False):
         # divide by season
-        months = da[tlabel].dt.month
+        if not has_month:
+            months = da[tlabel].dt.month
+        else:
+            months = da.month
         seasons = dict()
         seasons['winter'] = da.where((months >=7) & (months <=9))
         seasons['spring'] = da.where((months >=10) & (months <=12))
@@ -207,15 +210,15 @@ class Functions():
         ax.set_title('(a)',loc='left')
         ax.grid()
 
-        ax = fig.add_subplot(gs[1:4,0],projection=ccrs.TransverseMercator(central_longitude=145))
+        ax = fig.add_subplot(gs[1:4,0],projection=ccrs.Mercator(central_longitude=145))
         self.plotc(ax,top(da),'{} top {}%'.format(da_title,perc),extent,-ylim1,ylim1,vector=top(da_vector),lat_name=lat_name,lon_name=lon_name,ac=False)
-        ax = fig.add_subplot(gs[1:4,1],projection=ccrs.TransverseMercator(central_longitude=145))
+        ax = fig.add_subplot(gs[1:4,1],projection=ccrs.Mercator(central_longitude=145))
         self.plotc(ax,bot(da),'{} bottom {}%'.format(da_title,perc),extent,-ylim1,ylim1,vector=bot(da_vector),lat_name=lat_name,lon_name=lon_name,ac=False)
 
         if da2 is not None:
-            ax = fig.add_subplot(gs[4:7,0],projection=ccrs.TransverseMercator(central_longitude=145))
+            ax = fig.add_subplot(gs[4:7,0],projection=ccrs.Mercator(central_longitude=145))
             self.plotc(ax,top(da2),'{} top {}%'.format(da_title2,perc),extent,-ylim2,ylim2,vector=top(da_vector2),ac=False)
-            ax = fig.add_subplot(gs[4:7,1],projection=ccrs.TransverseMercator(central_longitude=145))
+            ax = fig.add_subplot(gs[4:7,1],projection=ccrs.Mercator(central_longitude=145))
             self.plotc(ax,bot(da2),'{} bottom {}%'.format(da_title2,perc),extent,-ylim2,ylim2,vector=bot(da_vector2),ac=False)
 
         plt.tight_layout()
