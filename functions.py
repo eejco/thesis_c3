@@ -52,10 +52,10 @@ class Functions():
         else:
             months = da.month
         seasons = dict()
-        seasons['winter'] = da.where((months >=7) & (months <=9))
-        seasons['spring'] = da.where((months >=10) & (months <=12))
-        seasons['summer'] = da.where((months >=1) & (months <=3))
-        seasons['autumn'] = da.where((months >=4) & (months <=6))
+        seasons['winter'] = da.where((months >=7) & (months <=9),drop=True)
+        seasons['spring'] = da.where((months >=10) & (months <=12),drop=True)
+        seasons['summer'] = da.where((months >=1) & (months <=3),drop=True)
+        seasons['autumn'] = da.where((months >=4) & (months <=6),drop=True)
         return seasons
 
     def seasonal_anomaly(self,da,tlabel='time'):

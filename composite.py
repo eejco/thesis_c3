@@ -116,9 +116,10 @@ class Composite():
 
     def posneg_map(self,axs,data,name: str,vmax,extent,add_profiles=False,label_loc=None):
         pfns = PlottingFns()
+        data = data.interp({'time':self.idx_data.time})
         # extract data where positive and negative
-        data_pos = data.where(self.idx_positive,drop=True).mean('time')
-        data_neg = data.where(self.idx_negative,drop=True).mean('time')
+        data_pos = data.where(self.idx_positive_with_lag,drop=True).mean('time')
+        data_neg = data.where(self.idx_negative_with_lag,drop=True).mean('time')
         # plot pos and neg maps
         im1=pfns.sp(axs[0],data_pos,extent=extent,cmap=cmocean.cm.balance,vmax=vmax,vmin=-vmax,land_zorder=3)#title='POSITIVE ' + idx_name + ', (> ' + fill_text + ')')
         im2=pfns.sp(axs[1],data_neg,extent=extent,cmap=cmocean.cm.balance,vmax=vmax,vmin=-vmax,land_zorder=3)#title='NEGATIVE ' + idx_name + ', (< '+ lower_fill_text + ')'
