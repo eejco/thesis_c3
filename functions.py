@@ -108,7 +108,7 @@ class Functions():
 
         return ug, vg
 
-    def plotc(self,ax,da,title,extent,vmin=None,vmax=None,cmap=cmocean.cm.balance,vector=None,rs=25,lat_name='latitude',lon_name='longitude',ac=True):
+    def plotc(self,ax,da,extent,title=None,vmin=None,vmax=None,cmap=cmocean.cm.balance,vector=None,rs=25,lat_name='latitude',lon_name='longitude',ac=True):
         im=da.plot.contourf(x=lon_name,y=lat_name,ax=ax,levels=40,transform=ccrs.PlateCarree(),vmin=vmin,vmax=vmax,add_colorbar=ac,cmap=cmap)
         if vector is not None:
             vector.plot.quiver(ax=ax,x=lon_name,y=lat_name,u='u10', v='v10',transform=ccrs.PlateCarree(),regrid_shape=rs)
@@ -169,7 +169,7 @@ class Functions():
         ax.grid()
 
 
-    def run_for_idx(self,idx,frac,da,da_vector,da_title,extent,lag=0,ylim_idx=12,da2=None,da_vector2=None,da_title2=None,ylim2=1,ylim1=1,lat_name='latitude',lon_name='longitude'):  
+    def run_for_idx(self,idx,frac,da,da_vector,extent,da_title=None,lag=0,ylim_idx=12,da2=None,da_vector2=None,da_title2=None,ylim2=1,ylim1=1,lat_name='latitude',lon_name='longitude'):  
         perc=int(frac*100)
         topboo, botboo, top, bot = self.get_topbot(idx,frac)
 
@@ -211,17 +211,26 @@ class Functions():
         ax.grid()
 
         ax = fig.add_subplot(gs[1:4,0],projection=ccrs.Mercator(central_longitude=145))
-        self.plotc(ax,top(da),'{} top {}%'.format(da_title,perc),extent,-ylim1,ylim1,vector=top(da_vector),lat_name=lat_name,lon_name=lon_name,ac=False)
+        self.plotc(ax,top(da),extent,vmin=-ylim1,vmax=ylim1,vector=top(da_vector),lat_name=lat_name,lon_name=lon_name,ac=False)
+        ax.set_title('(a)',loc='left') if da_title is None else ax.set_title('{} top {}%'.format(da_title,perc))
+
         ax = fig.add_subplot(gs[1:4,1],projection=ccrs.Mercator(central_longitude=145))
-        self.plotc(ax,bot(da),'{} bottom {}%'.format(da_title,perc),extent,-ylim1,ylim1,vector=bot(da_vector),lat_name=lat_name,lon_name=lon_name,ac=False)
+        self.plotc(ax,bot(da),extent,vmin=-ylim1,vmax=ylim1,vector=bot(da_vector),lat_name=lat_name,lon_name=lon_name,ac=False)
+        ax.set_title('(b)',loc='left') if da_title is None else ax.set_title('{} bottom {}%'.format(da_title,perc))
+
 
         if da2 is not None:
             ax = fig.add_subplot(gs[4:7,0],projection=ccrs.Mercator(central_longitude=145))
-            self.plotc(ax,top(da2),'{} top {}%'.format(da_title2,perc),extent,-ylim2,ylim2,vector=top(da_vector2),ac=False)
+            self.plotc(ax,top(da2),extent,vmin=-ylim2,vmax=ylim2,vector=top(da_vector2),ac=False)
+            ax.set_title('(d)',loc='left') if da_title is None else ax.set_title('{} top {}%'.format(da_title2,perc))
+
             ax = fig.add_subplot(gs[4:7,1],projection=ccrs.Mercator(central_longitude=145))
-            self.plotc(ax,bot(da2),'{} bottom {}%'.format(da_title2,perc),extent,-ylim2,ylim2,vector=bot(da_vector2),ac=False)
+            self.plotc(ax,bot(da2),extent,vmin=-ylim2,vmax=ylim2,vector=bot(da_vector2),ac=False)
+            ax.set_title('(e)',loc='left') if da_title is None else ax.set_title('{} bottom {}%'.format(da_title2,perc))
 
         plt.tight_layout()
+
+        return fig
 
     def get_asc(da,cropped_elevation,uname='u10',vname='v10',latmin=-66.4,latmax=-65):
         # get -1000 isobath usxing contour
