@@ -182,7 +182,7 @@ class Functions():
             gs = 4
 
         fig = plt.figure(figsize=(12,fs))
-        gs = fig.add_gridspec(gs,2)
+        gs = fig.add_gridspec(gs,11)
 
         ax = fig.add_subplot(gs[0, :])
 
@@ -211,23 +211,30 @@ class Functions():
         ax.set_title('(a)',loc='left')
         ax.grid()
 
-        ax = fig.add_subplot(gs[1:4,0],projection=ccrs.Mercator(central_longitude=145))
-        self.plotc(ax,top(da),extent,vmin=-ylim1,vmax=ylim1,vector=top(da_vector),lat_name=lat_name,lon_name=lon_name,ac=False)
-        ax.set_title('(b)',loc='left') if da_title is None else ax.set_title('{} top {}%'.format(da_title,perc))
+        ax = fig.add_subplot(gs[1:4,0:5],projection=ccrs.Mercator(central_longitude=145))
+        im=self.plotc(ax,top(da),extent,vmin=-ylim1,vmax=ylim1,vector=top(da_vector),lat_name=lat_name,lon_name=lon_name,ac=False)
+        ax.set_title('(b)',loc='left')# if da_title is None else ax.set_title('{} top {}%'.format(da_title,perc))
 
-        ax = fig.add_subplot(gs[1:4,1],projection=ccrs.Mercator(central_longitude=145))
-        self.plotc(ax,bot(da),extent,vmin=-ylim1,vmax=ylim1,vector=bot(da_vector),lat_name=lat_name,lon_name=lon_name,ac=False)
-        ax.set_title('(c)',loc='left') if da_title is None else ax.set_title('{} bottom {}%'.format(da_title,perc))
+        cbar_ax = fig.add_axes([0.915, 0.455, 0.02, 0.37])
+        fig.colorbar(im, cax=cbar_ax, label=da_title)
+
+
+        ax = fig.add_subplot(gs[1:4,5:10],projection=ccrs.Mercator(central_longitude=145))
+        im=self.plotc(ax,bot(da),extent,vmin=-ylim1,vmax=ylim1,vector=bot(da_vector),lat_name=lat_name,lon_name=lon_name,ac=False)
+        ax.set_title('(c)',loc='left')# if da_title is None else ax.set_title('{} bottom {}%'.format(da_title,perc))
 
 
         if da2 is not None:
-            ax = fig.add_subplot(gs[4:7,0],projection=ccrs.Mercator(central_longitude=145))
+            ax = fig.add_subplot(gs[4:7,0:5],projection=ccrs.Mercator(central_longitude=145))
             self.plotc(ax,top(da2),extent,vmin=-ylim2,vmax=ylim2,vector=top(da_vector2),ac=False)
-            ax.set_title('(d)',loc='left') if da_title is None else ax.set_title('{} top {}%'.format(da_title2,perc))
+            ax.set_title('(d)',loc='left')# if da_title is None else ax.set_title('{} top {}%'.format(da_title2,perc))
 
-            ax = fig.add_subplot(gs[4:7,1],projection=ccrs.Mercator(central_longitude=145))
-            self.plotc(ax,bot(da2),extent,vmin=-ylim2,vmax=ylim2,vector=bot(da_vector2),ac=False)
-            ax.set_title('(e)',loc='left') if da_title is None else ax.set_title('{} bottom {}%'.format(da_title2,perc))
+            ax = fig.add_subplot(gs[4:7,5:10],projection=ccrs.Mercator(central_longitude=145))
+            im=self.plotc(ax,bot(da2),extent,vmin=-ylim2,vmax=ylim2,vector=bot(da_vector2),ac=False)
+            ax.set_title('(e)',loc='left')# if da_title is None else ax.set_title('{} bottom {}%'.format(da_title2,perc))
+
+            cbar_ax = fig.add_axes([0.915, 0.0365, 0.02, 0.37])
+            fig.colorbar(im, cax=cbar_ax, label=da_title2)
 
         plt.tight_layout()
 
